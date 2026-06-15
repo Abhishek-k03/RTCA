@@ -1,0 +1,6 @@
+spring:
+  application:
+    name: rtca
+
+server:
+  port: 8080
