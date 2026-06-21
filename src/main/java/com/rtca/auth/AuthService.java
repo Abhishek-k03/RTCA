@@ -1,6 +1,7 @@
 package com.rtca.auth;
 
 import com.rtca.auth.dto.RegisterRequest;
+import com.rtca.common.exception.ConflictException;
 import com.rtca.user.User;
 import com.rtca.user.UserRepository;
 import com.rtca.user.dto.UserResponse;
@@ -22,10 +23,10 @@ public class AuthService {
         String email = request.email().trim().toLowerCase();
 
         if (userRepository.existsByUsername(username)) {
-            throw new IllegalArgumentException("Username already taken");
+            throw new ConflictException("Username already taken");
         }
         if (userRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("Email already registered");
+            throw new ConflictException("Email already registered");
         }
 
         User user = User.builder()
