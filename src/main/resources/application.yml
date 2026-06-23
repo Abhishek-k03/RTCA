@@ -32,3 +32,10 @@ spring:
 
 server:
   port: 8080
+
+app:
+  jwt:
+    # base64, 256 bits min. override in prod
+    secret: ${JWT_SECRET:ZGV2LW9ubHktc2VjcmV0LWtleS1mb3ItcnRjYS1jaGFuZ2UtbWUtaW4tcHJvZA==}
+    access-token-ttl: ${JWT_TTL:1h}
+    issuer: rtca
