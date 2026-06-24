@@ -1,5 +1,7 @@
 package com.rtca.auth.jwt;
 
+import com.rtca.auth.AuthUser;
+import com.rtca.user.Role;
 import com.rtca.user.User;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -51,6 +53,14 @@ public class JwtService {
             log.debug("Invalid jwt: {}", e.getMessage());
             return Optional.empty();
         }
+    }
+
+    public Optional<AuthUser> authenticate(String token) {
+        return parse(token).map(c -> new AuthUser(
+                Long.valueOf(c.getSubject()),
+                c.get("username", String.class),
+                Role.valueOf(c.get("role", String.class))
+        ));
     }
 
     public long getAccessTokenTtlSeconds() {
