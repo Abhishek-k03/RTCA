@@ -12,6 +12,16 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
 
     Optional<Conversation> findByDirectKey(String directKey);
 
+    /** Returns the new id, or empty if another tx already created this pair. */
+    @Query(nativeQuery = true, value = """
+            insert into conversations (type, direct_key, created_by, created_at, updated_at)
+            values ('DIRECT', :directKey, :createdBy, now(), now())
+            on conflict (direct_key) do nothing
+            returning id
+            """)
+    Optional<Long> insertDirectIfAbsent(@Param("directKey") String directKey,
+                                        @Param("createdBy") Long createdBy);
+
     @Query(value = """
             select c from Conversation c
             where exists (
