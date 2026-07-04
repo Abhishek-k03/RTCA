@@ -23,6 +23,7 @@ public class ConversationService {
     private final ConversationRepository conversationRepository;
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
+    private final MembershipService membershipService;
 
     @Transactional
     public ConversationResponse getOrCreateDirect(Long me, Long otherId) {
@@ -51,6 +52,13 @@ public class ConversationService {
                 // lost the race, the other tx has committed by now
                 .or(() -> conversationRepository.findByDirectKey(key))
                 .orElseThrow(() -> new IllegalStateException("Direct conversation missing for " + key));
+    }
+
+    @Transactional(readOnly = true)
+    public ConversationResponse get(Long me, Long conversationId) {
+        membershipService.requireMember(conversationId, me);
+        return toResponse(conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new NotFoundException("Conversation not found")));
     }
 
     @Transactional(readOnly = true)

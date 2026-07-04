@@ -25,6 +25,7 @@ public class GroupService {
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final ConversationService conversationService;
+    private final MembershipService membershipService;
 
     @Transactional
     public ConversationResponse create(Long me, CreateGroupRequest request) {
@@ -53,7 +54,7 @@ public class GroupService {
     @Transactional
     public ConversationResponse rename(Long me, Long groupId, String name) {
         Conversation group = getGroup(groupId);
-        requireManager(groupId, me);
+        membershipService.requireManager(groupId, me);
         group.setName(name.trim());
         return conversationService.toResponse(group);
     }
@@ -61,7 +62,7 @@ public class GroupService {
     @Transactional
     public ConversationResponse addMembers(Long me, Long groupId, Set<Long> userIds) {
         Conversation group = getGroup(groupId);
-        requireManager(groupId, me);
+        membershipService.requireManager(groupId, me);
         ensureUsersExist(userIds);
 
         Set<Long> existing = new HashSet<>(participantRepository.findUserIds(groupId));
@@ -81,7 +82,7 @@ public class GroupService {
                 .orElseThrow(() -> new NotFoundException("User is not a member"));
 
         if (!me.equals(userId)) {
-            ConversationParticipant actor = requireManager(groupId, me);
+            ConversationParticipant actor = membershipService.requireManager(groupId, me);
             if (target.getRole() == ParticipantRole.OWNER
                     || (target.getRole() == ParticipantRole.ADMIN && actor.getRole() != ParticipantRole.OWNER)) {
                 throw new ForbiddenException("Not allowed to remove this member");
@@ -99,7 +100,7 @@ public class GroupService {
     @Transactional
     public ConversationResponse changeRole(Long me, Long groupId, Long userId, ParticipantRole role) {
         Conversation group = getGroup(groupId);
-        ConversationParticipant actor = requireManager(groupId, me);
+        ConversationParticipant actor = membershipService.requireManager(groupId, me);
         if (actor.getRole() != ParticipantRole.OWNER) {
             throw new ForbiddenException("Only the owner can change roles");
         }
@@ -132,15 +133,6 @@ public class GroupService {
             throw new BadRequestException("Not a group conversation");
         }
         return c;
-    }
-
-    private ConversationParticipant requireManager(Long groupId, Long userId) {
-        ConversationParticipant p = participantRepository.findByConversationIdAndUserId(groupId, userId)
-                .orElseThrow(() -> new NotFoundException("Conversation not found"));
-        if (!p.getRole().canManageMembers()) {
-            throw new ForbiddenException("Only group admins can do this");
-        }
-        return p;
     }
 
     private void ensureUsersExist(Set<Long> ids) {
