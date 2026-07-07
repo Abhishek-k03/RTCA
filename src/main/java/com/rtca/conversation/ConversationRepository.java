@@ -3,9 +3,11 @@ package com.rtca.conversation;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Optional;
 
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
@@ -21,6 +23,14 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
             """)
     Optional<Long> insertDirectIfAbsent(@Param("directKey") String directKey,
                                         @Param("createdBy") Long createdBy);
+
+    // only moves forward, safe with concurrent senders
+    @Modifying
+    @Query("""
+            update Conversation c set c.lastMessageAt = :at
+            where c.id = :id and (c.lastMessageAt is null or c.lastMessageAt < :at)
+            """)
+    int touchLastMessageAt(@Param("id") Long id, @Param("at") Instant at);
 
     @Query(value = """
             select c from Conversation c
