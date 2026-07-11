@@ -39,6 +39,8 @@ app:
     secret: ${JWT_SECRET:ZGV2LW9ubHktc2VjcmV0LWtleS1mb3ItcnRjYS1jaGFuZ2UtbWUtaW4tcHJvZA==}
     access-token-ttl: ${JWT_TTL:1h}
     issuer: rtca
+  ws:
+    allowed-origins: ${WS_ALLOWED_ORIGINS:*}
   admin:
     username: ${ADMIN_USERNAME:}
     password: ${ADMIN_PASSWORD:}
