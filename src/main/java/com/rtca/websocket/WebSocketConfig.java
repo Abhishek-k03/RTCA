@@ -1,5 +1,6 @@
 package com.rtca.websocket;
 
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,7 +14,10 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 
 @Configuration
 @EnableWebSocketMessageBroker
+@RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
+
+    private final AuthChannelInterceptor authChannelInterceptor;
 
     @Value("${app.ws.allowed-origins:*}")
     private String[] allowedOrigins;
@@ -41,6 +45,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
+        registration.interceptors(authChannelInterceptor);
         registration.taskExecutor().corePoolSize(8).maxPoolSize(32).queueCapacity(1000);
     }
 
