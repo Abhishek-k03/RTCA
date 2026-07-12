@@ -18,6 +18,7 @@ import org.springframework.web.socket.config.annotation.WebSocketTransportRegist
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     private final AuthChannelInterceptor authChannelInterceptor;
+    private final SubscriptionGuardInterceptor subscriptionGuardInterceptor;
 
     @Value("${app.ws.allowed-origins:*}")
     private String[] allowedOrigins;
@@ -45,7 +46,7 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(authChannelInterceptor);
+        registration.interceptors(authChannelInterceptor, subscriptionGuardInterceptor);
         registration.taskExecutor().corePoolSize(8).maxPoolSize(32).queueCapacity(1000);
     }
 

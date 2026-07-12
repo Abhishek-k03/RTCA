@@ -9,6 +9,7 @@ import com.rtca.message.dto.MessageResponse;
 import com.rtca.message.dto.SendMessageRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final MembershipService membershipService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * Idempotent on (sender, clientMessageId). A retried send returns the
@@ -54,7 +56,11 @@ public class MessageService {
 
         Message message = messageRepository.findWithSender(insertedId.get()).orElseThrow();
         conversationRepository.touchLastMessageAt(conversationId, message.getCreatedAt());
-        return new SendResult(MessageResponse.from(message), true);
+
+        MessageResponse response = MessageResponse.from(message);
+        // broadcast happens after commit, see ChatEventPublisher
+        eventPublisher.publishEvent(new MessageCreatedEvent(response));
+        return new SendResult(response, true);
     }
 
     /**
