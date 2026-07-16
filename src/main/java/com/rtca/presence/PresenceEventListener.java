@@ -1,5 +1,8 @@
 package com.rtca.presence;
 
+import com.rtca.websocket.ChatEvent;
+import com.rtca.websocket.ChatEvent.EventType;
+import com.rtca.websocket.ChatEventPublisher;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.event.EventListener;
@@ -9,6 +12,7 @@ import org.springframework.web.socket.messaging.SessionConnectedEvent;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
 import java.security.Principal;
+import java.time.Instant;
 
 /** Presence is best effort, a redis failure must not break the socket. */
 @Slf4j
@@ -17,6 +21,7 @@ import java.security.Principal;
 public class PresenceEventListener {
 
     private final PresenceService presenceService;
+    private final ChatEventPublisher publisher;
 
     @EventListener
     public void onConnected(SessionConnectedEvent event) {
@@ -28,7 +33,7 @@ public class PresenceEventListener {
         Long userId = Long.valueOf(user.getName());
         try {
             if (presenceService.connected(userId, sessionId)) {
-                log.debug("User {} is online", userId);
+                publish(new PresenceStatus(userId, true, null));
             }
         } catch (Exception e) {
             log.warn("Failed to record connect for user {}: {}", userId, e.getMessage());
@@ -44,10 +49,15 @@ public class PresenceEventListener {
         Long userId = Long.valueOf(user.getName());
         try {
             if (presenceService.disconnected(userId, event.getSessionId())) {
-                log.debug("User {} is offline", userId);
+                publish(new PresenceStatus(userId, false, Instant.now()));
             }
         } catch (Exception e) {
             log.warn("Failed to record disconnect for user {}: {}", userId, e.getMessage());
         }
+    }
+
+    private void publish(PresenceStatus status) {
+        log.debug("User {} is {}", status.userId(), status.online() ? "online" : "offline");
+        publisher.presence(status.userId(), ChatEvent.of(EventType.PRESENCE, status));
     }
 }

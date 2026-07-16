@@ -30,7 +30,7 @@ public class SubscriptionGuardInterceptor implements ChannelInterceptor {
         if (destination == null) {
             throw new MessageDeliveryException("Missing destination");
         }
-        if (destination.startsWith("/user/")) {
+        if (destination.startsWith("/user/") || Destinations.isPresence(destination)) {
             return message;
         }
 

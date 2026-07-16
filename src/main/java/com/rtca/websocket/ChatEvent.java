@@ -5,7 +5,8 @@ public record ChatEvent(EventType type, Object payload) {
 
     public enum EventType {
         MESSAGE,
-        ACK
+        ACK,
+        PRESENCE
     }
 
     public static ChatEvent of(EventType type, Object payload) {

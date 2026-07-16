@@ -24,6 +24,10 @@ public class ChatEventPublisher {
         messagingTemplate.convertAndSend(Destinations.conversation(conversationId), event);
     }
 
+    public void presence(Long userId, ChatEvent event) {
+        messagingTemplate.convertAndSend(Destinations.presence(userId), event);
+    }
+
     public void toUser(Long userId, ChatEvent event) {
         messagingTemplate.convertAndSendToUser(String.valueOf(userId), Destinations.USER_EVENTS, event);
     }
