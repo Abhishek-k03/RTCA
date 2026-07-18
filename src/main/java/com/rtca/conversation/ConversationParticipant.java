@@ -52,4 +52,12 @@ public class ConversationParticipant {
     @CreationTimestamp
     @Column(name = "joined_at", nullable = false, updatable = false)
     private Instant joinedAt;
+
+    @Column(name = "last_delivered_message_id", nullable = false)
+    @Builder.Default
+    private Long lastDeliveredMessageId = 0L;
+
+    @Column(name = "last_read_message_id", nullable = false)
+    @Builder.Default
+    private Long lastReadMessageId = 0L;
 }

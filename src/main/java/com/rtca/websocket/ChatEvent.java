@@ -7,7 +7,9 @@ public record ChatEvent(EventType type, Object payload) {
         MESSAGE,
         ACK,
         PRESENCE,
-        TYPING
+        TYPING,
+        DELIVERED,
+        READ
     }
 
     public static ChatEvent of(EventType type, Object payload) {

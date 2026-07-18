@@ -3,6 +3,7 @@ package com.rtca.message;
 import com.rtca.auth.AuthUser;
 import com.rtca.message.dto.MessagePage;
 import com.rtca.message.dto.MessageResponse;
+import com.rtca.message.dto.ReceiptRequest;
 import com.rtca.message.dto.SendMessageRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class MessageController {
 
     private final MessageService messageService;
+    private final ReceiptService receiptService;
 
     @GetMapping
     public MessagePage history(@AuthenticationPrincipal AuthUser me,
@@ -31,6 +34,13 @@ public class MessageController {
                                @RequestParam(required = false) Long after,
                                @RequestParam(defaultValue = "50") int limit) {
         return messageService.history(me.id(), conversationId, before, after, limit);
+    }
+
+    @PostMapping("/read")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void markRead(@AuthenticationPrincipal AuthUser me, @PathVariable Long conversationId,
+                         @Valid @RequestBody ReceiptRequest request) {
+        receiptService.markRead(me.id(), conversationId, request.messageId());
     }
 
     @PostMapping

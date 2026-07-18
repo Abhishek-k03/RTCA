@@ -7,14 +7,18 @@ public record ParticipantResponse(
         Long userId,
         String username,
         String displayName,
-        ParticipantRole role
+        ParticipantRole role,
+        Long lastDeliveredMessageId,
+        Long lastReadMessageId
 ) {
     public static ParticipantResponse from(ConversationParticipant p) {
         return new ParticipantResponse(
                 p.getUser().getId(),
                 p.getUser().getUsername(),
                 p.getUser().getDisplayName(),
-                p.getRole()
+                p.getRole(),
+                p.getLastDeliveredMessageId(),
+                p.getLastReadMessageId()
         );
     }
 }

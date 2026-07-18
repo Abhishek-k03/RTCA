@@ -10,6 +10,8 @@ import java.util.Optional;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
+    boolean existsByIdAndConversationId(Long id, Long conversationId);
+
     @Query("select m from Message m join fetch m.sender where m.id = :id")
     Optional<Message> findWithSender(@Param("id") Long id);
 

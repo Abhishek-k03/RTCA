@@ -1,6 +1,7 @@
 package com.rtca.conversation;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -31,4 +32,25 @@ public interface ParticipantRepository extends JpaRepository<ConversationPartici
     List<Long> findUserIds(@Param("conversationId") Long conversationId);
 
     long countByConversationId(Long conversationId);
+
+    // pointers only move forward, so late or duplicate receipts are no-ops
+    @Modifying
+    @Query("""
+            update ConversationParticipant p
+            set p.lastReadMessageId = :messageId,
+                p.lastDeliveredMessageId = greatest(p.lastDeliveredMessageId, :messageId)
+            where p.conversation.id = :conversationId and p.user.id = :userId
+              and p.lastReadMessageId < :messageId
+            """)
+    int advanceRead(@Param("conversationId") Long conversationId, @Param("userId") Long userId,
+                    @Param("messageId") Long messageId);
+
+    @Modifying
+    @Query("""
+            update ConversationParticipant p set p.lastDeliveredMessageId = :messageId
+            where p.conversation.id = :conversationId and p.user.id = :userId
+              and p.lastDeliveredMessageId < :messageId
+            """)
+    int advanceDelivered(@Param("conversationId") Long conversationId, @Param("userId") Long userId,
+                         @Param("messageId") Long messageId);
 }
