@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -44,6 +45,19 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             """)
     List<Message> findAfter(@Param("conversationId") Long conversationId,
                             @Param("after") Long after, Pageable pageable);
+
+    /** Rows of [conversationId, unreadCount] for the given user. */
+    @Query("""
+            select m.conversationId, count(m) from Message m, ConversationParticipant p
+            where p.conversation.id = m.conversationId
+              and p.user.id = :userId
+              and m.conversationId in :conversationIds
+              and m.id > p.lastReadMessageId
+              and m.sender.id <> :userId
+            group by m.conversationId
+            """)
+    List<Object[]> countUnread(@Param("userId") Long userId,
+                               @Param("conversationIds") Collection<Long> conversationIds);
 
     /** Empty result means this (sender, clientMessageId) was already stored. */
     @Query(nativeQuery = true, value = """

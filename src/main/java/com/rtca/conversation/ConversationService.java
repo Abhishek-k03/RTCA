@@ -5,6 +5,7 @@ import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.NotFoundException;
 import com.rtca.conversation.dto.ConversationResponse;
 import com.rtca.conversation.dto.ParticipantResponse;
+import com.rtca.message.MessageRepository;
 import com.rtca.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -24,6 +25,7 @@ public class ConversationService {
     private final ParticipantRepository participantRepository;
     private final UserRepository userRepository;
     private final MembershipService membershipService;
+    private final MessageRepository messageRepository;
 
     @Transactional
     public ConversationResponse getOrCreateDirect(Long me, Long otherId) {
@@ -57,8 +59,13 @@ public class ConversationService {
     @Transactional(readOnly = true)
     public ConversationResponse get(Long me, Long conversationId) {
         membershipService.requireMember(conversationId, me);
-        return toResponse(conversationRepository.findById(conversationId)
-                .orElseThrow(() -> new NotFoundException("Conversation not found")));
+        Conversation c = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+        List<ParticipantResponse> participants = participantRepository.findWithUsers(c.getId()).stream()
+                .map(ParticipantResponse::from)
+                .toList();
+        return ConversationResponse.from(c, participants,
+                unreadCounts(me, List.of(conversationId)).getOrDefault(conversationId, 0L));
     }
 
     @Transactional(readOnly = true)
@@ -72,7 +79,19 @@ public class ConversationService {
                 .collect(Collectors.groupingBy(p -> p.getConversation().getId(),
                         Collectors.mapping(ParticipantResponse::from, Collectors.toList())));
 
-        return PageResponse.of(page, c -> ConversationResponse.from(c, participants.getOrDefault(c.getId(), List.of())));
+        Map<Long, Long> unread = unreadCounts(userId, ids);
+
+        return PageResponse.of(page, c -> ConversationResponse.from(c,
+                participants.getOrDefault(c.getId(), List.of()),
+                unread.getOrDefault(c.getId(), 0L)));
+    }
+
+    private Map<Long, Long> unreadCounts(Long userId, List<Long> conversationIds) {
+        if (conversationIds.isEmpty()) {
+            return Map.of();
+        }
+        return messageRepository.countUnread(userId, conversationIds).stream()
+                .collect(Collectors.toMap(r -> (Long) r[0], r -> (Long) r[1]));
     }
 
     ConversationParticipant addParticipant(Conversation c, Long userId, ParticipantRole role) {
