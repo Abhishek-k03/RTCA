@@ -91,6 +91,7 @@ public class GroupService {
 
         participantRepository.delete(target);
         participantRepository.flush();
+        membershipService.evict(groupId, userId);
 
         if (target.getRole() == ParticipantRole.OWNER) {
             transferOwnership(group);

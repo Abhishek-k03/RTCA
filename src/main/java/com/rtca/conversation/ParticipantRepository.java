@@ -1,5 +1,7 @@
 package com.rtca.conversation;
 
+import com.rtca.common.config.CacheConfig;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -11,6 +13,8 @@ import java.util.Optional;
 
 public interface ParticipantRepository extends JpaRepository<ConversationParticipant, Long> {
 
+    // hot path for every send/subscribe. only "true" is cached
+    @Cacheable(cacheNames = CacheConfig.MEMBERSHIP, key = "#p0 + ':' + #p1", unless = "!#result")
     boolean existsByConversationIdAndUserId(Long conversationId, Long userId);
 
     Optional<ConversationParticipant> findByConversationIdAndUserId(Long conversationId, Long userId);

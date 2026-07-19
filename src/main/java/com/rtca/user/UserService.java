@@ -1,5 +1,6 @@
 package com.rtca.user;
 
+import com.rtca.common.config.CacheConfig;
 import com.rtca.common.dto.PageResponse;
 import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.NotFoundException;
@@ -7,6 +8,8 @@ import com.rtca.user.dto.UpdateProfileRequest;
 import com.rtca.user.dto.UserResponse;
 import com.rtca.user.dto.UserSummary;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +31,7 @@ public class UserService {
         return UserResponse.from(getById(id));
     }
 
+    @CacheEvict(cacheNames = CacheConfig.USERS, key = "#id")
     @Transactional
     public UserResponse updateProfile(Long id, UpdateProfileRequest request) {
         User user = getById(id);
@@ -35,6 +39,7 @@ public class UserService {
         return UserResponse.from(user);
     }
 
+    @Cacheable(cacheNames = CacheConfig.USERS, key = "#id")
     @Transactional(readOnly = true)
     public UserSummary getSummary(Long id) {
         return UserSummary.from(getById(id));

@@ -30,6 +30,9 @@ spring:
     enabled: true
     locations: classpath:db/migration
 
+  cache:
+    type: redis
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}

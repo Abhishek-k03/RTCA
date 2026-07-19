@@ -95,11 +95,13 @@ public class ConversationService {
     }
 
     ConversationParticipant addParticipant(Conversation c, Long userId, ParticipantRole role) {
-        return participantRepository.save(ConversationParticipant.builder()
+        ConversationParticipant p = participantRepository.save(ConversationParticipant.builder()
                 .conversation(c)
                 .user(userRepository.getReferenceById(userId))
                 .role(role)
                 .build());
+        membershipService.evict(c.getId(), userId);
+        return p;
     }
 
     ConversationResponse toResponse(Conversation c) {
