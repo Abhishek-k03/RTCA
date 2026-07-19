@@ -51,6 +51,8 @@ app:
     issuer: rtca
   ws:
     allowed-origins: ${WS_ALLOWED_ORIGINS:*}
+  relay:
+    enabled: ${RELAY_ENABLED:true}
   admin:
     username: ${ADMIN_USERNAME:}
     password: ${ADMIN_PASSWORD:}
