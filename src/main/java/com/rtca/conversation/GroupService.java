@@ -128,7 +128,7 @@ public class GroupService {
     }
 
     private Conversation getGroup(Long id) {
-        Conversation c = conversationRepository.findById(id)
+        Conversation c = conversationRepository.findForUpdate(id)
                 .orElseThrow(() -> new NotFoundException("Conversation not found"));
         if (!c.isGroup()) {
             throw new BadRequestException("Not a group conversation");

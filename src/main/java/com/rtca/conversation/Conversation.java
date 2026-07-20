@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -40,6 +41,10 @@ public class Conversation extends BaseEntity {
 
     @Column(name = "last_message_at")
     private Instant lastMessageAt;
+
+    /** Guards group edits. lastMessageAt is bulk updated and skips this. */
+    @Version
+    private Long version;
 
     public boolean isGroup() {
         return type == ConversationType.GROUP;
