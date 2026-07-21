@@ -56,6 +56,10 @@ app:
     allowed-origins: ${WS_ALLOWED_ORIGINS:*}
   relay:
     enabled: ${RELAY_ENABLED:true}
+  rate-limit:
+    messages:
+      limit: ${MSG_RATE_LIMIT:20}
+      window: ${MSG_RATE_WINDOW:10s}
   admin:
     username: ${ADMIN_USERNAME:}
     password: ${ADMIN_PASSWORD:}

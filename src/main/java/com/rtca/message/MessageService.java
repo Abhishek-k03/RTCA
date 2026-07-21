@@ -2,6 +2,7 @@ package com.rtca.message;
 
 import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.ConflictException;
+import com.rtca.common.ratelimit.RateLimiter;
 import com.rtca.conversation.ConversationRepository;
 import com.rtca.conversation.MembershipService;
 import com.rtca.message.dto.MessagePage;
@@ -27,6 +28,7 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final MembershipService membershipService;
     private final ApplicationEventPublisher eventPublisher;
+    private final RateLimiter rateLimiter;
 
     /**
      * Idempotent on (sender, clientMessageId). A retried send returns the
@@ -34,6 +36,7 @@ public class MessageService {
      */
     @Transactional
     public SendResult send(Long senderId, Long conversationId, SendMessageRequest request) {
+        rateLimiter.checkMessageSend(senderId);
         membershipService.requireMember(conversationId, senderId);
 
         String content = request.content().strip();
