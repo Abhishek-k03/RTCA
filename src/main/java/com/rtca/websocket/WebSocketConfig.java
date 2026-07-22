@@ -26,8 +26,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
         registry.addEndpoint("/ws").setAllowedOriginPatterns(allowedOrigins);
-        // keep per-session frame order despite the thread pools
-        registry.setPreserveReceiveOrder(true);
     }
 
     @Override
