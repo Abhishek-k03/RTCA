@@ -35,8 +35,6 @@ public interface ParticipantRepository extends JpaRepository<ConversationPartici
     @Query("select p.user.id from ConversationParticipant p where p.conversation.id = :conversationId")
     List<Long> findUserIds(@Param("conversationId") Long conversationId);
 
-    long countByConversationId(Long conversationId);
-
     // pointers only move forward, so late or duplicate receipts are no-ops
     @Modifying
     @Query("""
