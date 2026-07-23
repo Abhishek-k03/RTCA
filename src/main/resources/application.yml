@@ -43,8 +43,27 @@ spring:
         pool:
           enabled: false
 
+  lifecycle:
+    timeout-per-shutdown-phase: 20s
+
 server:
   port: 8080
+  shutdown: graceful
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+      roles: ADMIN
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState,db,redis
 
 app:
   jwt:
