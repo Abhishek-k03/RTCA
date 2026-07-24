@@ -60,4 +60,32 @@ public class ConversationParticipant {
     @Column(name = "last_read_message_id", nullable = false)
     @Builder.Default
     private Long lastReadMessageId = 0L;
+
+    @Column(name = "removed_at")
+    private Instant removedAt;
+
+    // last message a removed member may still see
+    @Column(name = "removed_after_message_id")
+    private Long removedAfterMessageId;
+
+    public boolean isActive() {
+        return removedAt == null;
+    }
+
+    /** Highest message id this participant may see. */
+    public long visibleUpTo() {
+        return isActive() ? Long.MAX_VALUE : removedAfterMessageId;
+    }
+
+    public void remove(Long lastMessageId) {
+        removedAt = Instant.now();
+        removedAfterMessageId = lastMessageId;
+        role = ParticipantRole.MEMBER;
+    }
+
+    public void restore() {
+        removedAt = null;
+        removedAfterMessageId = null;
+        role = ParticipantRole.MEMBER;
+    }
 }

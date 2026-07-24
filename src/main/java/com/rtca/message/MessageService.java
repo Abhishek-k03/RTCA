@@ -72,7 +72,8 @@ public class MessageService {
      */
     @Transactional(readOnly = true)
     public MessagePage history(Long userId, Long conversationId, Long before, Long after, int limit) {
-        membershipService.requireMember(conversationId, userId);
+        // removed members can still read up to the point they were removed
+        long maxId = membershipService.requireAccess(conversationId, userId).visibleUpTo();
         if (before != null && after != null) {
             throw new BadRequestException("Use either 'before' or 'after', not both");
         }
@@ -83,11 +84,11 @@ public class MessageService {
 
         List<Message> rows;
         if (after != null) {
-            rows = messageRepository.findAfter(conversationId, after, page);
+            rows = messageRepository.findAfter(conversationId, after, maxId, page);
         } else if (before != null) {
-            rows = messageRepository.findBefore(conversationId, before, page);
+            rows = messageRepository.findBefore(conversationId, before, maxId, page);
         } else {
-            rows = messageRepository.findLatest(conversationId, page);
+            rows = messageRepository.findLatest(conversationId, maxId, page);
         }
 
         boolean hasMore = rows.size() > size;

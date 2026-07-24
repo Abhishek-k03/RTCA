@@ -1,0 +1,195 @@
+package com.rtca;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.rtca.conversation.dto.ConversationResponse;
+import com.rtca.conversation.dto.ParticipantResponse;
+import com.rtca.message.dto.MessagePage;
+import com.rtca.message.dto.MessageResponse;
+import com.rtca.support.IntegrationTest;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.lang.NonNull;
+import org.springframework.messaging.converter.MappingJackson2MessageConverter;
+import org.springframework.messaging.simp.stomp.StompFrameHandler;
+import org.springframework.messaging.simp.stomp.StompHeaders;
+import org.springframework.messaging.simp.stomp.StompSession;
+import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
+import org.springframework.web.socket.WebSocketHttpHeaders;
+import org.springframework.web.socket.client.standard.StandardWebSocketClient;
+import org.springframework.web.socket.messaging.WebSocketStompClient;
+
+import java.lang.reflect.Type;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.http.HttpMethod.DELETE;
+import static org.springframework.http.HttpMethod.GET;
+import static org.springframework.http.HttpMethod.POST;
+
+class GroupRemovalIntegrationTest extends IntegrationTest {
+
+    private WebSocketStompClient stompClient;
+
+    @BeforeEach
+    void setUp() {
+        stompClient = new WebSocketStompClient(new StandardWebSocketClient());
+        stompClient.setMessageConverter(new MappingJackson2MessageConverter());
+    }
+
+    @AfterEach
+    void tearDown() {
+        stompClient.stop();
+    }
+
+    @Test
+    void removedMemberKeepsReadOnlyHistoryUpToRemoval() {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        TestUser carol = newUser();
+        Long groupId = group(alice, bob, carol);
+
+        Long before = send(alice, groupId, "before").getBody().id();
+        remove(alice, groupId, bob);
+        send(alice, groupId, "after");
+
+        ConversationResponse seen = call(GET, "/api/conversations/" + groupId, bob, null,
+                ConversationResponse.class).getBody();
+        assertThat(seen.removedAt()).isNotNull();
+        assertThat(seen.participants()).extracting(ParticipantResponse::userId).doesNotContain(bob.id());
+        assertThat(seen.unreadCount()).isEqualTo(1);
+
+        List<Long> history = history(bob, groupId).items().stream().map(MessageResponse::id).toList();
+        assertThat(history).containsExactly(before);
+
+        assertThat(send(bob, groupId, "let me back").getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+    }
+
+    @Test
+    void removedMemberStopsReceivingLiveMessages() throws Exception {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        TestUser carol = newUser();
+        Long groupId = group(alice, bob, carol);
+
+        StompSession bobSession = connect(bob.token());
+        BlockingQueue<JsonNode> bobTopic = subscribe(bobSession, "/topic/conversations." + groupId);
+        BlockingQueue<JsonNode> bobEvents = subscribe(bobSession, "/user/queue/events");
+        StompSession carolSession = connect(carol.token());
+        BlockingQueue<JsonNode> carolTopic = subscribe(carolSession, "/topic/conversations." + groupId);
+        Thread.sleep(300);
+
+        remove(alice, groupId, bob);
+        JsonNode removed = nextOfType(bobEvents, "REMOVED");
+        assertThat(removed.at("/payload/conversationId").asLong()).isEqualTo(groupId);
+
+        send(alice, groupId, "bob should not see this");
+        assertThat(nextOfType(carolTopic, "MESSAGE").at("/payload/content").asText())
+                .isEqualTo("bob should not see this");
+        assertThat(bobTopic.poll(1, TimeUnit.SECONDS)).isNull();
+    }
+
+    @Test
+    void onlyFormerMembersCanDeleteConversation() {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        Long groupId = group(alice, bob);
+
+        assertThat(call(DELETE, "/api/conversations/" + groupId, bob, null, Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.BAD_REQUEST);
+
+        remove(bob, groupId, bob);
+        assertThat(call(DELETE, "/api/conversations/" + groupId, bob, null, Void.class).getStatusCode())
+                .isEqualTo(HttpStatus.NO_CONTENT);
+
+        assertThat(call(GET, "/api/conversations/" + groupId, bob, null, Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(call(GET, "/api/conversations/" + groupId, alice, null, Map.class).getStatusCode())
+                .isEqualTo(HttpStatus.OK);
+    }
+
+    @Test
+    void readdedMemberSeesFullHistoryAndCanSend() {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        TestUser carol = newUser();
+        Long groupId = group(alice, bob, carol);
+
+        send(alice, groupId, "one");
+        remove(alice, groupId, bob);
+        send(alice, groupId, "two");
+        call(POST, "/api/conversations/groups/" + groupId + "/members", alice,
+                Map.of("userIds", List.of(bob.id())), ConversationResponse.class);
+
+        ConversationResponse seen = call(GET, "/api/conversations/" + groupId, bob, null,
+                ConversationResponse.class).getBody();
+        assertThat(seen.removedAt()).isNull();
+        assertThat(history(bob, groupId).items()).extracting(MessageResponse::content).containsExactly("two", "one");
+        assertThat(send(bob, groupId, "back").getStatusCode()).isEqualTo(HttpStatus.CREATED);
+    }
+
+    private Long group(TestUser owner, TestUser... members) {
+        List<Long> ids = Arrays.stream(members).map(TestUser::id).toList();
+        return call(POST, "/api/conversations/groups", owner, Map.of("name", "g", "memberIds", ids),
+                ConversationResponse.class).getBody().id();
+    }
+
+    private void remove(TestUser as, Long groupId, TestUser target) {
+        assertThat(call(DELETE, "/api/conversations/groups/" + groupId + "/members/" + target.id(), as, null,
+                Void.class).getStatusCode().is2xxSuccessful()).isTrue();
+    }
+
+    private ResponseEntity<MessageResponse> send(TestUser as, Long convId, String content) {
+        return call(POST, "/api/conversations/" + convId + "/messages", as,
+                Map.of("clientMessageId", UUID.randomUUID().toString(), "content", content),
+                MessageResponse.class);
+    }
+
+    private MessagePage history(TestUser as, Long convId) {
+        return call(GET, "/api/conversations/" + convId + "/messages", as, null, MessagePage.class).getBody();
+    }
+
+    private StompSession connect(String token) throws Exception {
+        StompHeaders headers = new StompHeaders();
+        headers.add("Authorization", "Bearer " + token);
+        return stompClient.connectAsync("ws://localhost:" + port + "/ws", new WebSocketHttpHeaders(),
+                headers, new StompSessionHandlerAdapter() {
+                }).get(5, TimeUnit.SECONDS);
+    }
+
+    private BlockingQueue<JsonNode> subscribe(StompSession session, String destination) {
+        BlockingQueue<JsonNode> queue = new LinkedBlockingQueue<>();
+        session.subscribe(destination, new StompFrameHandler() {
+            @Override
+            @NonNull
+            public Type getPayloadType(@NonNull StompHeaders headers) {
+                return JsonNode.class;
+            }
+
+            @Override
+            public void handleFrame(@NonNull StompHeaders headers, Object payload) {
+                queue.add((JsonNode) payload);
+            }
+        });
+        return queue;
+    }
+
+    private JsonNode nextOfType(BlockingQueue<JsonNode> queue, String type) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (System.currentTimeMillis() < deadline) {
+            JsonNode node = queue.poll(500, TimeUnit.MILLISECONDS);
+            if (node != null && type.equals(node.path("type").asText())) {
+                return node;
+            }
+        }
+        throw new AssertionError("No " + type + " event received");
+    }
+}

@@ -14,13 +14,20 @@ public record ConversationResponse(
         List<ParticipantResponse> participants,
         Instant createdAt,
         Instant lastMessageAt,
-        @JsonInclude(JsonInclude.Include.NON_NULL) Long unreadCount
+        @JsonInclude(JsonInclude.Include.NON_NULL) Long unreadCount,
+        // set when the viewer was removed, the conversation is read-only for them
+        @JsonInclude(JsonInclude.Include.NON_NULL) Instant removedAt
 ) {
     public static ConversationResponse from(Conversation c, List<ParticipantResponse> participants) {
         return from(c, participants, null);
     }
 
     public static ConversationResponse from(Conversation c, List<ParticipantResponse> participants, Long unreadCount) {
+        return from(c, participants, unreadCount, null);
+    }
+
+    public static ConversationResponse from(Conversation c, List<ParticipantResponse> participants, Long unreadCount,
+                                            Instant removedAt) {
         return new ConversationResponse(
                 c.getId(),
                 c.getType(),
@@ -28,7 +35,8 @@ public record ConversationResponse(
                 participants,
                 c.getCreatedAt(),
                 c.getLastMessageAt(),
-                unreadCount
+                unreadCount,
+                removedAt
         );
     }
 }

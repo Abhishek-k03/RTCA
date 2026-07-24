@@ -1,5 +1,6 @@
 package com.rtca.websocket;
 
+import com.rtca.conversation.MemberRemovedEvent;
 import com.rtca.message.MessageCreatedEvent;
 import com.rtca.websocket.ChatEvent.EventType;
 import com.rtca.websocket.relay.RedisEventRelay;
@@ -22,15 +23,22 @@ public class ChatEventPublisher {
         toConversation(event.message().conversationId(), ChatEvent.of(EventType.MESSAGE, event.message()));
     }
 
+    // drop the removed user's live subscription on every instance, then tell their clients
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMemberRemoved(MemberRemovedEvent event) {
+        relay.publish(new RelayMessage(Destinations.USER_EVENTS, String.valueOf(event.userId()),
+                ChatEvent.of(EventType.REMOVED, event), Destinations.conversation(event.conversationId())));
+    }
+
     public void toConversation(Long conversationId, ChatEvent event) {
-        relay.publish(new RelayMessage(Destinations.conversation(conversationId), null, event));
+        relay.publish(new RelayMessage(Destinations.conversation(conversationId), null, event, null));
     }
 
     public void presence(Long userId, ChatEvent event) {
-        relay.publish(new RelayMessage(Destinations.presence(userId), null, event));
+        relay.publish(new RelayMessage(Destinations.presence(userId), null, event, null));
     }
 
     public void toUser(Long userId, ChatEvent event) {
-        relay.publish(new RelayMessage(Destinations.USER_EVENTS, String.valueOf(userId), event));
+        relay.publish(new RelayMessage(Destinations.USER_EVENTS, String.valueOf(userId), event, null));
     }
 }

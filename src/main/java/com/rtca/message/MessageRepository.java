@@ -25,26 +25,30 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     @Query("""
             select m from Message m join fetch m.sender
-            where m.conversationId = :conversationId
+            where m.conversationId = :conversationId and m.id <= :maxId
             order by m.id desc
             """)
-    List<Message> findLatest(@Param("conversationId") Long conversationId, Pageable pageable);
+    List<Message> findLatest(@Param("conversationId") Long conversationId,
+                             @Param("maxId") Long maxId, Pageable pageable);
 
     @Query("""
             select m from Message m join fetch m.sender
-            where m.conversationId = :conversationId and m.id < :before
+            where m.conversationId = :conversationId and m.id < :before and m.id <= :maxId
             order by m.id desc
             """)
     List<Message> findBefore(@Param("conversationId") Long conversationId,
-                             @Param("before") Long before, Pageable pageable);
+                             @Param("before") Long before, @Param("maxId") Long maxId, Pageable pageable);
 
     @Query("""
             select m from Message m join fetch m.sender
-            where m.conversationId = :conversationId and m.id > :after
+            where m.conversationId = :conversationId and m.id > :after and m.id <= :maxId
             order by m.id asc
             """)
     List<Message> findAfter(@Param("conversationId") Long conversationId,
-                            @Param("after") Long after, Pageable pageable);
+                            @Param("after") Long after, @Param("maxId") Long maxId, Pageable pageable);
+
+    @Query("select coalesce(max(m.id), 0) from Message m where m.conversationId = :conversationId")
+    Long findLastId(@Param("conversationId") Long conversationId);
 
     /** Rows of [conversationId, unreadCount] for the given user. */
     @Query("""
@@ -53,6 +57,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
               and p.user.id = :userId
               and m.conversationId in :conversationIds
               and m.id > p.lastReadMessageId
+              and (p.removedAfterMessageId is null or m.id <= p.removedAfterMessageId)
               and m.sender.id <> :userId
             group by m.conversationId
             """)

@@ -5,8 +5,10 @@ import com.rtca.common.exception.ForbiddenException;
 import com.rtca.common.exception.NotFoundException;
 import com.rtca.conversation.dto.ConversationResponse;
 import com.rtca.conversation.dto.CreateGroupRequest;
+import com.rtca.message.MessageRepository;
 import com.rtca.user.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,8 @@ public class GroupService {
     private final UserRepository userRepository;
     private final ConversationService conversationService;
     private final MembershipService membershipService;
+    private final MessageRepository messageRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public ConversationResponse create(Long me, CreateGroupRequest request) {
@@ -70,16 +74,24 @@ public class GroupService {
         if (existing.size() + toAdd.size() > MAX_MEMBERS) {
             throw new BadRequestException("Group cannot have more than " + MAX_MEMBERS + " members");
         }
-        toAdd.forEach(id -> conversationService.addParticipant(group, id, ParticipantRole.MEMBER));
+        // removed members keep their row, so re-adding restores it
+        toAdd.forEach(id -> participantRepository.findByConversationIdAndUserId(groupId, id)
+                .ifPresentOrElse(p -> {
+                    p.restore();
+                    membershipService.evict(groupId, id);
+                }, () -> conversationService.addParticipant(group, id, ParticipantRole.MEMBER)));
 
         return conversationService.toResponse(group);
     }
 
+    /**
+     * Removing (or leaving) keeps the row so the user can still read history
+     * up to this point. They stop receiving live events after commit.
+     */
     @Transactional
     public void removeMember(Long me, Long groupId, Long userId) {
         Conversation group = getGroup(groupId);
-        ConversationParticipant target = participantRepository.findByConversationIdAndUserId(groupId, userId)
-                .orElseThrow(() -> new NotFoundException("User is not a member"));
+        ConversationParticipant target = activeParticipant(groupId, userId);
 
         if (!me.equals(userId)) {
             ConversationParticipant actor = membershipService.requireManager(groupId, me);
@@ -89,11 +101,13 @@ public class GroupService {
             }
         }
 
-        participantRepository.delete(target);
+        boolean wasOwner = target.getRole() == ParticipantRole.OWNER;
+        target.remove(messageRepository.findLastId(groupId));
         participantRepository.flush();
         membershipService.evict(groupId, userId);
+        eventPublisher.publishEvent(new MemberRemovedEvent(groupId, userId, target.getRemovedAt()));
 
-        if (target.getRole() == ParticipantRole.OWNER) {
+        if (wasOwner) {
             transferOwnership(group);
         }
     }
@@ -108,13 +122,12 @@ public class GroupService {
         if (role == ParticipantRole.OWNER || me.equals(userId)) {
             throw new BadRequestException("Invalid role change");
         }
-        ConversationParticipant target = participantRepository.findByConversationIdAndUserId(groupId, userId)
-                .orElseThrow(() -> new NotFoundException("User is not a member"));
+        ConversationParticipant target = activeParticipant(groupId, userId);
         target.setRole(role);
         return conversationService.toResponse(group);
     }
 
-    // oldest admin, else oldest member, becomes owner. empty groups are deleted
+    // oldest admin, else oldest member, becomes owner. groups with no active members are deleted
     private void transferOwnership(Conversation group) {
         List<ConversationParticipant> remaining = participantRepository.findWithUsers(group.getId());
         if (remaining.isEmpty()) {
@@ -125,6 +138,12 @@ public class GroupService {
                 .min(Comparator.comparing((ConversationParticipant p) -> p.getRole() != ParticipantRole.ADMIN)
                         .thenComparing(ConversationParticipant::getJoinedAt))
                 .ifPresent(p -> p.setRole(ParticipantRole.OWNER));
+    }
+
+    private ConversationParticipant activeParticipant(Long groupId, Long userId) {
+        return participantRepository.findByConversationIdAndUserId(groupId, userId)
+                .filter(ConversationParticipant::isActive)
+                .orElseThrow(() -> new NotFoundException("User is not a member"));
     }
 
     private Conversation getGroup(Long id) {

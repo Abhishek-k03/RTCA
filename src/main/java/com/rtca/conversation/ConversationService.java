@@ -13,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -58,14 +59,25 @@ public class ConversationService {
 
     @Transactional(readOnly = true)
     public ConversationResponse get(Long me, Long conversationId) {
-        membershipService.requireMember(conversationId, me);
+        ConversationParticipant viewer = membershipService.requireAccess(conversationId, me);
         Conversation c = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new NotFoundException("Conversation not found"));
         List<ParticipantResponse> participants = participantRepository.findWithUsers(c.getId()).stream()
                 .map(ParticipantResponse::from)
                 .toList();
         return ConversationResponse.from(c, participants,
-                unreadCounts(me, List.of(conversationId)).getOrDefault(conversationId, 0L));
+                unreadCounts(me, List.of(conversationId)).getOrDefault(conversationId, 0L),
+                viewer.getRemovedAt());
+    }
+
+    /** Only former members can delete a conversation from their list. */
+    @Transactional
+    public void deleteForUser(Long me, Long conversationId) {
+        ConversationParticipant p = membershipService.requireAccess(conversationId, me);
+        if (p.isActive()) {
+            throw new BadRequestException("Leave the group before deleting it");
+        }
+        participantRepository.delete(p);
     }
 
     @Transactional(readOnly = true)
@@ -80,10 +92,14 @@ public class ConversationService {
                         Collectors.mapping(ParticipantResponse::from, Collectors.toList())));
 
         Map<Long, Long> unread = unreadCounts(userId, ids);
+        Map<Long, Instant> removed = ids.isEmpty() ? Map.of()
+                : participantRepository.findRemoved(userId, ids).stream()
+                .collect(Collectors.toMap(p -> p.getConversation().getId(), ConversationParticipant::getRemovedAt));
 
         return PageResponse.of(page, c -> ConversationResponse.from(c,
                 participants.getOrDefault(c.getId(), List.of()),
-                unread.getOrDefault(c.getId(), 0L)));
+                unread.getOrDefault(c.getId(), 0L),
+                removed.get(c.getId())));
     }
 
     private Map<Long, Long> unreadCounts(Long userId, List<Long> conversationIds) {

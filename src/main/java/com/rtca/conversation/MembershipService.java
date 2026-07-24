@@ -19,8 +19,9 @@ public class MembershipService {
     private final ParticipantRepository participantRepository;
     private final CacheManager cacheManager;
 
+    /** Active member: may send, type, subscribe. */
     public boolean isMember(Long conversationId, Long userId) {
-        return participantRepository.existsByConversationIdAndUserId(conversationId, userId);
+        return participantRepository.existsByConversationIdAndUserIdAndRemovedAtIsNull(conversationId, userId);
     }
 
     public void requireMember(Long conversationId, Long userId) {
@@ -29,9 +30,17 @@ public class MembershipService {
         }
     }
 
+    /** Active or removed member. Removed ones get read-only access to old history. */
+    @Transactional(readOnly = true)
+    public ConversationParticipant requireAccess(Long conversationId, Long userId) {
+        return participantRepository.findByConversationIdAndUserId(conversationId, userId)
+                .orElseThrow(() -> new NotFoundException("Conversation not found"));
+    }
+
     @Transactional(readOnly = true)
     public ConversationParticipant getParticipant(Long conversationId, Long userId) {
         return participantRepository.findByConversationIdAndUserId(conversationId, userId)
+                .filter(ConversationParticipant::isActive)
                 .orElseThrow(() -> new NotFoundException("Conversation not found"));
     }
 

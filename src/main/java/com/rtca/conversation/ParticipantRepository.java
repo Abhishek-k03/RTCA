@@ -15,24 +15,34 @@ public interface ParticipantRepository extends JpaRepository<ConversationPartici
 
     // hot path for every send/subscribe. only "true" is cached
     @Cacheable(cacheNames = CacheConfig.MEMBERSHIP, key = "#p0 + ':' + #p1", unless = "!#result")
-    boolean existsByConversationIdAndUserId(Long conversationId, Long userId);
+    boolean existsByConversationIdAndUserIdAndRemovedAtIsNull(Long conversationId, Long userId);
 
     Optional<ConversationParticipant> findByConversationIdAndUserId(Long conversationId, Long userId);
 
     @Query("""
             select p from ConversationParticipant p join fetch p.user
-            where p.conversation.id = :conversationId
+            where p.conversation.id = :conversationId and p.removedAt is null
             order by p.joinedAt
             """)
     List<ConversationParticipant> findWithUsers(@Param("conversationId") Long conversationId);
 
     @Query("""
             select p from ConversationParticipant p join fetch p.user
-            where p.conversation.id in :conversationIds
+            where p.conversation.id in :conversationIds and p.removedAt is null
             """)
     List<ConversationParticipant> findWithUsers(@Param("conversationIds") Collection<Long> conversationIds);
 
-    @Query("select p.user.id from ConversationParticipant p where p.conversation.id = :conversationId")
+    @Query("""
+            select p from ConversationParticipant p
+            where p.user.id = :userId and p.conversation.id in :conversationIds and p.removedAt is not null
+            """)
+    List<ConversationParticipant> findRemoved(@Param("userId") Long userId,
+                                              @Param("conversationIds") Collection<Long> conversationIds);
+
+    @Query("""
+            select p.user.id from ConversationParticipant p
+            where p.conversation.id = :conversationId and p.removedAt is null
+            """)
     List<Long> findUserIds(@Param("conversationId") Long conversationId);
 
     // pointers only move forward, so late or duplicate receipts are no-ops

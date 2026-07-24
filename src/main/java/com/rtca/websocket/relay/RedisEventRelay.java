@@ -1,6 +1,7 @@
 package com.rtca.websocket.relay;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.rtca.websocket.TopicUnsubscriber;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,15 +28,18 @@ public class RedisEventRelay implements MessageListener {
     private final RedisTemplate<String, Object> redis;
     private final SimpMessagingTemplate messagingTemplate;
     private final ObjectMapper objectMapper;
+    private final TopicUnsubscriber unsubscriber;
     private final boolean enabled;
 
     public RedisEventRelay(@Qualifier("jsonRedisTemplate") RedisTemplate<String, Object> redis,
                            SimpMessagingTemplate messagingTemplate,
                            ObjectMapper objectMapper,
+                           TopicUnsubscriber unsubscriber,
                            @Value("${app.relay.enabled:true}") boolean enabled) {
         this.redis = redis;
         this.messagingTemplate = messagingTemplate;
         this.objectMapper = objectMapper;
+        this.unsubscriber = unsubscriber;
         this.enabled = enabled;
     }
 
@@ -62,6 +66,9 @@ public class RedisEventRelay implements MessageListener {
     }
 
     private void deliverLocally(RelayMessage message) {
+        if (message.user() != null && message.unsubscribe() != null) {
+            unsubscriber.unsubscribe(message.user(), message.unsubscribe());
+        }
         if (message.user() != null) {
             messagingTemplate.convertAndSendToUser(message.user(), message.destination(), message.event());
         } else {

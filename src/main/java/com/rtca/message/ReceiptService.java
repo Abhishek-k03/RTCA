@@ -1,6 +1,7 @@
 package com.rtca.message;
 
 import com.rtca.common.exception.NotFoundException;
+import com.rtca.conversation.ConversationParticipant;
 import com.rtca.conversation.MembershipService;
 import com.rtca.conversation.ParticipantRepository;
 import com.rtca.websocket.ChatEvent;
@@ -24,25 +25,28 @@ public class ReceiptService {
     /** Marks everything up to messageId as read (which implies delivered). */
     @Transactional
     public void markRead(Long userId, Long conversationId, Long messageId) {
-        validate(userId, conversationId, messageId);
-        if (participantRepository.advanceRead(conversationId, userId, messageId) > 0) {
-            publishAfterCommit(conversationId, EventType.READ, new Receipt(conversationId, userId, messageId));
+        ConversationParticipant p = membershipService.requireAccess(conversationId, userId);
+        long id = visibleId(p, conversationId, messageId);
+        if (id > 0 && participantRepository.advanceRead(conversationId, userId, id) > 0 && p.isActive()) {
+            publishAfterCommit(conversationId, EventType.READ, new Receipt(conversationId, userId, id));
         }
     }
 
     @Transactional
     public void markDelivered(Long userId, Long conversationId, Long messageId) {
-        validate(userId, conversationId, messageId);
-        if (participantRepository.advanceDelivered(conversationId, userId, messageId) > 0) {
-            publishAfterCommit(conversationId, EventType.DELIVERED, new Receipt(conversationId, userId, messageId));
+        ConversationParticipant p = membershipService.requireAccess(conversationId, userId);
+        long id = visibleId(p, conversationId, messageId);
+        if (id > 0 && participantRepository.advanceDelivered(conversationId, userId, id) > 0 && p.isActive()) {
+            publishAfterCommit(conversationId, EventType.DELIVERED, new Receipt(conversationId, userId, id));
         }
     }
 
-    private void validate(Long userId, Long conversationId, Long messageId) {
-        membershipService.requireMember(conversationId, userId);
+    // removed members only move pointers up to their cutoff, and nobody is told
+    private long visibleId(ConversationParticipant p, Long conversationId, Long messageId) {
         if (!messageRepository.existsByIdAndConversationId(messageId, conversationId)) {
             throw new NotFoundException("Message not found");
         }
+        return Math.min(messageId, p.visibleUpTo());
     }
 
     private void publishAfterCommit(Long conversationId, EventType type, Receipt receipt) {
