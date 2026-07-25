@@ -45,6 +45,16 @@ public interface ParticipantRepository extends JpaRepository<ConversationPartici
             """)
     List<Long> findUserIds(@Param("conversationId") Long conversationId);
 
+    @Query("select p.user.id from ConversationParticipant p where p.conversation.id = :conversationId and p.hidden = true")
+    List<Long> findHiddenUserIds(@Param("conversationId") Long conversationId);
+
+    @Modifying
+    @Query("""
+            update ConversationParticipant p set p.hidden = false
+            where p.conversation.id = :conversationId and p.hidden = true
+            """)
+    int unhideAll(@Param("conversationId") Long conversationId);
+
     // pointers only move forward, so late or duplicate receipts are no-ops
     @Modifying
     @Query("""

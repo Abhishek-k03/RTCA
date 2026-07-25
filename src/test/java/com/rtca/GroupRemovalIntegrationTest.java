@@ -173,6 +173,70 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asLong()).isEqualTo(groupId);
     }
 
+    @Test
+    void newGroupNotifiesMembersButNotCreator() throws Exception {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        BlockingQueue<JsonNode> aliceEvents = subscribe(connect(alice.token()), "/user/queue/events");
+        BlockingQueue<JsonNode> bobEvents = subscribe(connect(bob.token()), "/user/queue/events");
+        Thread.sleep(300);
+
+        Long groupId = group(alice, bob);
+
+        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asLong()).isEqualTo(groupId);
+        assertThat(aliceEvents.poll(1, TimeUnit.SECONDS)).isNull();
+    }
+
+    @Test
+    void directChatStaysHiddenFromBothUntilFirstMessage() throws Exception {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        BlockingQueue<JsonNode> bobEvents = subscribe(connect(bob.token()), "/user/queue/events");
+        Thread.sleep(300);
+
+        Long directId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
+                ConversationResponse.class).getBody().id();
+        assertThat(bobEvents.poll(1, TimeUnit.SECONDS)).isNull();
+        assertThat(listIds(bob)).doesNotContain(directId);
+        assertThat(listIds(alice)).doesNotContain(directId);
+
+        send(alice, directId, "hi bob");
+        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asLong()).isEqualTo(directId);
+        assertThat(listIds(alice)).contains(directId);
+        List<ConversationResponse> bobList = list(bob);
+        assertThat(bobList).extracting(ConversationResponse::id).contains(directId);
+        assertThat(bobList.stream().filter(c -> c.id().equals(directId)).findFirst().orElseThrow().unreadCount())
+                .isEqualTo(1);
+
+        send(alice, directId, "second");
+        assertThat(bobEvents.poll(1, TimeUnit.SECONDS)).isNull();
+    }
+
+    @Test
+    void openingDirectChatFromEitherSideReusesItAndFirstMessageShowsIt() {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        Long directId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
+                ConversationResponse.class).getBody().id();
+
+        Long bobsId = call(POST, "/api/conversations/direct", bob, Map.of("userId", alice.id()),
+                ConversationResponse.class).getBody().id();
+        assertThat(bobsId).isEqualTo(directId);
+        assertThat(listIds(bob)).doesNotContain(directId);
+
+        send(bob, directId, "hi alice");
+        assertThat(listIds(alice)).contains(directId);
+        assertThat(listIds(bob)).contains(directId);
+    }
+
+    private List<ConversationResponse> list(TestUser as) {
+        return call(GET, "/api/conversations", as, null, ConversationPage.class).getBody().content();
+    }
+
+    private List<Long> listIds(TestUser as) {
+        return list(as).stream().map(ConversationResponse::id).toList();
+    }
+
     private record ConversationPage(List<ConversationResponse> content) {
     }
 

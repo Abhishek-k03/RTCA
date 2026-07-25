@@ -61,6 +61,11 @@ public class ConversationParticipant {
     @Builder.Default
     private Long lastReadMessageId = 0L;
 
+    // hidden from this user's list until the first message
+    @Column(nullable = false)
+    @Builder.Default
+    private boolean hidden = false;
+
     @Column(name = "removed_at")
     private Instant removedAt;
 

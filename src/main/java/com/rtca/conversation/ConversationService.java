@@ -48,8 +48,9 @@ public class ConversationService {
         return conversationRepository.insertDirectIfAbsent(key, me)
                 .map(id -> {
                     Conversation c = conversationRepository.getReferenceById(id);
-                    addParticipant(c, me, ParticipantRole.MEMBER);
-                    addParticipant(c, otherId, ParticipantRole.MEMBER);
+                    // stays out of both lists until the first message, like telegram
+                    addParticipant(c, me, ParticipantRole.MEMBER, true);
+                    addParticipant(c, otherId, ParticipantRole.MEMBER, true);
                     return c;
                 })
                 // lost the race, the other tx has committed by now
@@ -111,10 +112,15 @@ public class ConversationService {
     }
 
     ConversationParticipant addParticipant(Conversation c, Long userId, ParticipantRole role) {
+        return addParticipant(c, userId, role, false);
+    }
+
+    ConversationParticipant addParticipant(Conversation c, Long userId, ParticipantRole role, boolean hidden) {
         ConversationParticipant p = participantRepository.save(ConversationParticipant.builder()
                 .conversation(c)
                 .user(userRepository.getReferenceById(userId))
                 .role(role)
+                .hidden(hidden)
                 .build());
         membershipService.evict(c.getId(), userId);
         return p;

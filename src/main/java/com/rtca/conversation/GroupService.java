@@ -51,6 +51,7 @@ public class GroupService {
 
         conversationService.addParticipant(group, me, ParticipantRole.OWNER);
         memberIds.forEach(id -> conversationService.addParticipant(group, id, ParticipantRole.MEMBER));
+        memberIds.forEach(id -> eventPublisher.publishEvent(new MemberAddedEvent(group.getId(), id)));
 
         return conversationService.toResponse(group);
     }

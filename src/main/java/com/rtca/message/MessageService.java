@@ -4,7 +4,9 @@ import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.ConflictException;
 import com.rtca.common.ratelimit.RateLimiter;
 import com.rtca.conversation.ConversationRepository;
+import com.rtca.conversation.MemberAddedEvent;
 import com.rtca.conversation.MembershipService;
+import com.rtca.conversation.ParticipantRepository;
 import com.rtca.message.dto.MessagePage;
 import com.rtca.message.dto.MessageResponse;
 import com.rtca.message.dto.SendMessageRequest;
@@ -27,6 +29,7 @@ public class MessageService {
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
     private final MembershipService membershipService;
+    private final ParticipantRepository participantRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final RateLimiter rateLimiter;
 
@@ -59,11 +62,22 @@ public class MessageService {
 
         Message message = messageRepository.findWithSender(insertedId.get()).orElseThrow();
         conversationRepository.touchLastMessageAt(conversationId, message.getCreatedAt());
+        revealToHiddenParticipants(conversationId);
 
         MessageResponse response = MessageResponse.from(message);
         // broadcast happens after commit, see ChatEventPublisher
         eventPublisher.publishEvent(new MessageCreatedEvent(response));
         return new SendResult(response, true);
+    }
+
+    // a new direct chat shows up for the receiver with its first message
+    private void revealToHiddenParticipants(Long conversationId) {
+        List<Long> hidden = participantRepository.findHiddenUserIds(conversationId);
+        if (hidden.isEmpty()) {
+            return;
+        }
+        participantRepository.unhideAll(conversationId);
+        hidden.forEach(userId -> eventPublisher.publishEvent(new MemberAddedEvent(conversationId, userId)));
     }
 
     /**
