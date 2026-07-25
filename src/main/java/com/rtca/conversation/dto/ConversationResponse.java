@@ -34,7 +34,8 @@ public record ConversationResponse(
                 c.getName(),
                 participants,
                 c.getCreatedAt(),
-                c.getLastMessageAt(),
+                // removed viewers don't get to see later activity
+                removedAt != null ? removedAt : c.getLastMessageAt(),
                 unreadCount,
                 removedAt
         );

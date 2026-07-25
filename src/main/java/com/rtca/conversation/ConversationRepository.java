@@ -41,10 +41,9 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
 
     @Query(value = """
             select c from Conversation c
-            where exists (
-                select 1 from ConversationParticipant p
-                where p.conversation = c and p.user.id = :userId)
-            order by coalesce(c.lastMessageAt, c.createdAt) desc
+            join ConversationParticipant p on p.conversation = c and p.user.id = :userId
+            order by case when p.removedAt is not null then p.removedAt
+                          else coalesce(c.lastMessageAt, c.createdAt) end desc
             """,
             countQuery = """
             select count(p) from ConversationParticipant p where p.user.id = :userId

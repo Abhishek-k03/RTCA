@@ -136,6 +136,46 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         assertThat(send(bob, groupId, "back").getStatusCode()).isEqualTo(HttpStatus.CREATED);
     }
 
+    @Test
+    void removedGroupStaysAtRemovalTimeInList() {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        TestUser carol = newUser();
+        Long groupId = group(alice, bob, carol);
+        Long directId = call(POST, "/api/conversations/direct", carol, Map.of("userId", bob.id()),
+                ConversationResponse.class).getBody().id();
+
+        remove(alice, groupId, bob);
+        send(carol, directId, "direct after removal");
+        send(alice, groupId, "group chatter bob can't see");
+
+        List<ConversationResponse> list = call(GET, "/api/conversations", bob, null, ConversationPage.class)
+                .getBody().content();
+        assertThat(list).extracting(ConversationResponse::id).containsExactly(directId, groupId);
+        ConversationResponse removed = list.get(1);
+        assertThat(removed.lastMessageAt()).isEqualTo(removed.removedAt());
+    }
+
+    @Test
+    void readdedMemberGetsAddedEvent() throws Exception {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        TestUser carol = newUser();
+        Long groupId = group(alice, bob, carol);
+        remove(alice, groupId, bob);
+
+        StompSession bobSession = connect(bob.token());
+        BlockingQueue<JsonNode> bobEvents = subscribe(bobSession, "/user/queue/events");
+        Thread.sleep(300);
+
+        call(POST, "/api/conversations/groups/" + groupId + "/members", alice,
+                Map.of("userIds", List.of(bob.id())), ConversationResponse.class);
+        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asLong()).isEqualTo(groupId);
+    }
+
+    private record ConversationPage(List<ConversationResponse> content) {
+    }
+
     private Long group(TestUser owner, TestUser... members) {
         List<Long> ids = Arrays.stream(members).map(TestUser::id).toList();
         return call(POST, "/api/conversations/groups", owner, Map.of("name", "g", "memberIds", ids),

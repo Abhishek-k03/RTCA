@@ -80,6 +80,7 @@ public class GroupService {
                     p.restore();
                     membershipService.evict(groupId, id);
                 }, () -> conversationService.addParticipant(group, id, ParticipantRole.MEMBER)));
+        toAdd.forEach(id -> eventPublisher.publishEvent(new MemberAddedEvent(groupId, id)));
 
         return conversationService.toResponse(group);
     }

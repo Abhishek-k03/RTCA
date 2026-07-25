@@ -10,7 +10,8 @@ public record ChatEvent(EventType type, Object payload) {
         TYPING,
         DELIVERED,
         READ,
-        REMOVED
+        REMOVED,
+        ADDED
     }
 
     public static ChatEvent of(EventType type, Object payload) {

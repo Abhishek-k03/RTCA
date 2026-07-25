@@ -1,5 +1,6 @@
 package com.rtca.websocket;
 
+import com.rtca.conversation.MemberAddedEvent;
 import com.rtca.conversation.MemberRemovedEvent;
 import com.rtca.message.MessageCreatedEvent;
 import com.rtca.websocket.ChatEvent.EventType;
@@ -28,6 +29,11 @@ public class ChatEventPublisher {
     public void onMemberRemoved(MemberRemovedEvent event) {
         relay.publish(new RelayMessage(Destinations.USER_EVENTS, String.valueOf(event.userId()),
                 ChatEvent.of(EventType.REMOVED, event), Destinations.conversation(event.conversationId())));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMemberAdded(MemberAddedEvent event) {
+        toUser(event.userId(), ChatEvent.of(EventType.ADDED, event));
     }
 
     public void toConversation(Long conversationId, ChatEvent event) {
