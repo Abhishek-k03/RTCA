@@ -7,15 +7,20 @@ import { displayName } from '../lib'
 import ChatWindow from '../components/ChatWindow'
 import ConversationList from '../components/ConversationList'
 import NewGroupDialog from '../components/NewGroupDialog'
+import SearchPanel from '../components/SearchPanel'
+import { useRecentSearches } from '../recentSearches'
 
 export default function ChatPage() {
   const { user, logout } = useAuth()
-  const { connected, subscribe, publish } = useStomp()
+  const { connected, subscribe, publish, pushError } = useStomp()
   const { id } = useParams()
   const activeId = id ? Number(id) : null
   const navigate = useNavigate()
   const [conversations, setConversations] = useState([])
   const [showNewGroup, setShowNewGroup] = useState(false)
+  const [searching, setSearching] = useState(false)
+  const [query, setQuery] = useState('')
+  const recents = useRecentSearches(user.id)
 
   // new chats arrive as ADDED events; focus refetch is just a safety net
   const load = useCallback(() => {
@@ -91,6 +96,29 @@ export default function ChatPage() {
     navigate(`/c/${c.id}`)
   }
 
+  const closeSearch = () => {
+    setSearching(false)
+    setQuery('')
+  }
+
+  const openChat = (entry) => {
+    recents.add(entry)
+    closeSearch()
+    navigate(`/c/${entry.id}`)
+  }
+
+  // a new direct chat stays out of the list until the first message is sent
+  const openUser = async (entry) => {
+    recents.add({ type: 'user', id: entry.id, username: entry.username, displayName: entry.displayName })
+    closeSearch()
+    try {
+      const c = await api.createDirect(entry.id)
+      navigate(`/c/${c.id}`)
+    } catch (err) {
+      pushError(err.message)
+    }
+  }
+
   const onDeleted = (cid) => {
     setConversations((list) => list.filter((c) => c.id !== cid))
     navigate('/')
@@ -109,19 +137,32 @@ export default function ChatPage() {
 
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-72 flex-col border-r">
-          <div className="border-b p-2">
-            <button className="border px-2" onClick={() => setShowNewGroup(!showNewGroup)}>New group</button>
+          <div className="flex gap-1 border-b p-2">
+            <input className="min-w-0 flex-1 border p-1" placeholder="Search" value={query}
+              onFocus={() => setSearching(true)}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') closeSearch()
+              }} />
+            {searching
+              ? <button className="px-2" onClick={closeSearch}>Cancel</button>
+              : <button className="border px-2" onClick={() => setShowNewGroup(!showNewGroup)}>New group</button>}
           </div>
-          {showNewGroup && <NewGroupDialog onCreated={onGroupCreated} onClose={() => setShowNewGroup(false)} />}
+          {showNewGroup && !searching && (
+            <NewGroupDialog onCreated={onGroupCreated} onClose={() => setShowNewGroup(false)} />
+          )}
           <div className="flex-1 overflow-y-auto">
-            <ConversationList conversations={conversations} activeId={activeId} meId={user.id} />
+            {searching
+              ? <SearchPanel query={query} conversations={conversations} meId={user.id} recents={recents}
+                  onOpenChat={openChat} onOpenUser={openUser} />
+              : <ConversationList conversations={conversations} activeId={activeId} meId={user.id} />}
           </div>
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
           {activeId
             ? <ChatWindow key={activeId} conversationId={activeId} onRead={onRead} onChanged={onChanged} onDeleted={onDeleted} />
-            : <p className="p-4 text-gray-500">Select a conversation</p>}
+            : <p className="p-4 text-gray-500">Select a chat, or search for someone to message</p>}
         </main>
       </div>
     </div>
