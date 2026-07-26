@@ -71,10 +71,25 @@ public class ConversationService {
                 viewer.getRemovedAt());
     }
 
-    /** Only former members can delete a conversation from their list. */
+    /** Hides all current messages for this user only. */
+    @Transactional
+    public void clearForUser(Long me, Long conversationId) {
+        membershipService.requireAccess(conversationId, me)
+                .clear(messageRepository.findLastId(conversationId));
+    }
+
+    /**
+     * Direct chats are cleared and hidden, the next message brings them back.
+     * Groups can only be deleted after leaving.
+     */
     @Transactional
     public void deleteForUser(Long me, Long conversationId) {
         ConversationParticipant p = membershipService.requireAccess(conversationId, me);
+        if (!p.getConversation().isGroup()) {
+            p.clear(messageRepository.findLastId(conversationId));
+            p.setHidden(true);
+            return;
+        }
         if (p.isActive()) {
             throw new BadRequestException("Leave the group before deleting it");
         }

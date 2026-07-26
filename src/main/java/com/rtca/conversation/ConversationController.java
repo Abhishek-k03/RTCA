@@ -43,6 +43,12 @@ public class ConversationController {
         return conversationService.getOrCreateDirect(me.id(), request.userId());
     }
 
+    @PostMapping("/{id}/clear")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void clear(@AuthenticationPrincipal AuthUser me, @PathVariable Long id) {
+        conversationService.clearForUser(me.id(), id);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@AuthenticationPrincipal AuthUser me, @PathVariable Long id) {

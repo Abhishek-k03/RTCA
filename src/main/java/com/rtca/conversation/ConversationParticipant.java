@@ -66,6 +66,11 @@ public class ConversationParticipant {
     @Builder.Default
     private boolean hidden = false;
 
+    // messages up to this id were cleared by this member
+    @Column(name = "cleared_up_to_message_id", nullable = false)
+    @Builder.Default
+    private Long clearedUpToMessageId = 0L;
+
     @Column(name = "removed_at")
     private Instant removedAt;
 
@@ -80,6 +85,10 @@ public class ConversationParticipant {
     /** Highest message id this participant may see. */
     public long visibleUpTo() {
         return isActive() ? Long.MAX_VALUE : removedAfterMessageId;
+    }
+
+    public void clear(Long lastMessageId) {
+        clearedUpToMessageId = Math.max(clearedUpToMessageId, Math.min(lastMessageId, visibleUpTo()));
     }
 
     public void remove(Long lastMessageId) {

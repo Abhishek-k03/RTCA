@@ -3,6 +3,7 @@ package com.rtca.message;
 import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.ConflictException;
 import com.rtca.common.ratelimit.RateLimiter;
+import com.rtca.conversation.ConversationParticipant;
 import com.rtca.conversation.ConversationRepository;
 import com.rtca.conversation.MemberAddedEvent;
 import com.rtca.conversation.MembershipService;
@@ -87,7 +88,9 @@ public class MessageService {
     @Transactional(readOnly = true)
     public MessagePage history(Long userId, Long conversationId, Long before, Long after, int limit) {
         // removed members can still read up to the point they were removed
-        long maxId = membershipService.requireAccess(conversationId, userId).visibleUpTo();
+        ConversationParticipant p = membershipService.requireAccess(conversationId, userId);
+        long minId = p.getClearedUpToMessageId();
+        long maxId = p.visibleUpTo();
         if (before != null && after != null) {
             throw new BadRequestException("Use either 'before' or 'after', not both");
         }
@@ -98,11 +101,11 @@ public class MessageService {
 
         List<Message> rows;
         if (after != null) {
-            rows = messageRepository.findAfter(conversationId, after, maxId, page);
+            rows = messageRepository.findAfter(conversationId, after, minId, maxId, page);
         } else if (before != null) {
-            rows = messageRepository.findBefore(conversationId, before, maxId, page);
+            rows = messageRepository.findBefore(conversationId, before, minId, maxId, page);
         } else {
-            rows = messageRepository.findLatest(conversationId, maxId, page);
+            rows = messageRepository.findLatest(conversationId, minId, maxId, page);
         }
 
         boolean hasMore = rows.size() > size;
