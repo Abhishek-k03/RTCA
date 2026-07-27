@@ -12,6 +12,10 @@ A backend for a real-time chat application built with Spring Boot. It supports o
 - Online/offline presence with multi-tab support and last-seen
 - Typing indicators
 - Delivery and read receipts, with unread counts
+- Removed members keep a read-only copy of the group, up to the point they were removed
+- New direct chats stay out of both lists until the first message
+- Clear chat and delete chat, per user
+- Edit messages and delete them for yourself or for everyone (within 15 minutes)
 - Redis caching, per-user rate limiting, and pub/sub relay for running multiple instances
 - Centralized validation and error handling for both REST and WebSocket
 - Docker Compose setup with health checks
@@ -72,6 +76,7 @@ docker compose up -d postgres redis
 | `JWT_TTL` | `1h` | |
 | `WS_ALLOWED_ORIGINS` | `*` | comma separated |
 | `MSG_RATE_LIMIT` / `MSG_RATE_WINDOW` | `20` / `10s` | messages per user per window |
+| `MSG_EDIT_WINDOW` / `MSG_DELETE_WINDOW` | `15m` / `15m` | how long a sender can edit or delete for everyone |
 | `RELAY_ENABLED` | `true` | Redis pub/sub fan-out |
 
 ## REST API
@@ -87,15 +92,20 @@ All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` head
 | GET | `/api/users/search?q=` | search by username/display name |
 | GET | `/api/conversations` | my conversations with unread counts, most recent first |
 | GET | `/api/conversations/{id}` | conversation details |
-| POST | `/api/conversations/direct` | `{userId}` get or create a direct chat |
+| POST | `/api/conversations/direct` | `{userId}` get or create a direct chat (hidden until the first message) |
+| POST | `/api/conversations/{id}/clear` | hide all current messages, only for you |
+| DELETE | `/api/conversations/{id}` | direct: clear and hide until the next message. group: only after leaving |
 | POST | `/api/conversations/groups` | `{name, memberIds}` create a group |
 | PATCH | `/api/conversations/groups/{id}` | rename (admins) |
 | POST | `/api/conversations/groups/{id}/members` | add members (admins) |
-| DELETE | `/api/conversations/groups/{id}/members/{userId}` | remove member or leave |
+| DELETE | `/api/conversations/groups/{id}/members/{userId}` | remove member or leave (the chat stays read-only for them) |
 | PATCH | `/api/conversations/groups/{id}/members/{userId}/role` | change role (owner) |
 | GET | `/api/conversations/{id}/messages?before=&after=&limit=` | history |
 | POST | `/api/conversations/{id}/messages` | `{clientMessageId, content}` send |
 | POST | `/api/conversations/{id}/messages/read` | `{messageId}` mark read |
+| PATCH | `/api/conversations/{id}/messages/{messageId}` | `{content}` edit your own message |
+| DELETE | `/api/conversations/{id}/messages/{messageId}?scope=me` | hide a message for yourself (no time limit) |
+| DELETE | `/api/conversations/{id}/messages/{messageId}?scope=everyone` | delete your own message for all members |
 | GET | `/api/presence?userIds=1,2` | presence status |
 | GET / PATCH | `/api/admin/users` | admin only |
 
@@ -122,12 +132,20 @@ accept-version:1.2
 | send | `/app/conversations.{id}.typing` | `{typing: true/false}` |
 | send | `/app/conversations.{id}.delivered` | `{messageId}` |
 | send | `/app/conversations.{id}.read` | `{messageId}` |
-| subscribe | `/topic/conversations.{id}` | `MESSAGE`, `TYPING`, `DELIVERED`, `READ` events (members only) |
+| subscribe | `/topic/conversations.{id}` | `MESSAGE`, `EDITED`, `DELETED`, `TYPING`, `DELIVERED`, `READ` events (members only) |
 | subscribe | `/topic/presence.{userId}` | `PRESENCE` events |
-| subscribe | `/user/queue/events` | `ACK` for your own sends |
+| subscribe | `/user/queue/events` | `ACK` for your own sends, `ADDED` / `REMOVED` membership changes |
 | subscribe | `/user/queue/errors` | errors from your frames |
 
 Every event uses the envelope `{"type": "...", "payload": {...}}`.
+
+- `ADDED {conversationId}`: you were added to a group, or someone sent the first message in a direct chat with you. Reload the conversation list.
+- `REMOVED {conversationId, removedAt}`: you were removed from a group or left it. The chat is now read-only, stop using its topic.
+
+- `EDITED {message}`: the full updated message, with `editedAt` set.
+- `DELETED {conversationId, messageId}`: a message was deleted for everyone.
+
+Conversation responses include `removedAt` when you are no longer a member. Messages include `editedAt`, and `deleted: true` with `content: null` once deleted for everyone.
 
 ## Design notes
 
@@ -143,6 +161,13 @@ This holds under concurrent retries because Postgres decides the winner atomical
 - **Group edits:** `conversations.version` is checked with an `OPTIMISTIC_FORCE_INCREMENT` lock, so concurrent membership or rename changes can't silently overwrite each other. The loser gets a `409` and can retry.
 - **Read/delivered receipts:** these are stored as pointers per participant. The updates use `WHERE last_read_message_id < :id`, so the pointers only move forward, and late or duplicate receipts do nothing.
 - **Last message timestamp:** `lastMessageAt` is updated with a conditional bulk update. It never goes backwards and never conflicts with group edits.
+
+### Membership changes
+- **Removal keeps the row.** Removing a member (or leaving) sets `removed_at` and remembers the last message they may see. They keep read access to that history, cannot send or subscribe, and can delete the chat from their list.
+- **Live cutoff.** The subscribe check only runs on SUBSCRIBE, so after removal the server drops the user's existing subscriptions to that topic on every instance (through the Redis relay) and sends them `REMOVED`.
+- **Hidden direct chats.** Opening a direct chat creates it hidden for both users. The first message reveals it and sends `ADDED` to both.
+- **Edit and delete.** Only the sender can edit or delete for everyone, within `MSG_EDIT_WINDOW` / `MSG_DELETE_WINDOW`. Deleting for everyone wipes the content but keeps the row, so ids, cursors and receipts stay valid. Deleting for yourself adds a row to `message_hides`, which history and unread counts skip for that user.
+- **Per-user views.** Clearing a chat stores a per-member `cleared_up_to_message_id`, so history and unread counts skip older messages for that user only. Deleting a direct chat clears and hides it, and the next message brings it back.
 
 ### Transactions
 Service methods own the transaction boundaries, and reads are `readOnly`. Broadcasts run in `AFTER_COMMIT` listeners, so clients never see a message that was rolled back. Cache evictions for membership changes also run after commit, so a concurrent reader can't re-cache stale data.
@@ -184,10 +209,13 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
   - non-member access
   - unread counts
   - STOMP messaging end to end
+  - group removal, re-adding and membership events
+  - clearing and deleting chats
+  - editing and deleting messages, including the time limit
 
 ## Possible improvements
 
 - Refresh tokens and token revocation
 - An external broker relay (RabbitMQ/ActiveMQ STOMP) instead of the simple broker plus Redis relay
 - An outbox table for guaranteed event delivery when Redis is down for a long time
-- Message edit/delete, attachments, and push notifications
+- Attachments and push notifications
