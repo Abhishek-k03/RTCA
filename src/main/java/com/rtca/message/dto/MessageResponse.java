@@ -13,7 +13,9 @@ public record MessageResponse(
         String content,
         MessageType type,
         String clientMessageId,
-        Instant createdAt
+        Instant createdAt,
+        Instant editedAt,
+        boolean deleted
 ) {
     public static MessageResponse from(Message m) {
         return new MessageResponse(
@@ -21,10 +23,12 @@ public record MessageResponse(
                 m.getConversationId(),
                 m.getSender().getId(),
                 m.getSender().getUsername(),
-                m.getContent(),
+                m.isDeleted() ? null : m.getContent(),
                 m.getType(),
                 m.getClientMessageId(),
-                m.getCreatedAt()
+                m.getCreatedAt(),
+                m.getEditedAt(),
+                m.isDeleted()
         );
     }
 }

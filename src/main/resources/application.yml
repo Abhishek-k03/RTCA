@@ -75,6 +75,9 @@ app:
     allowed-origins: ${WS_ALLOWED_ORIGINS:*}
   relay:
     enabled: ${RELAY_ENABLED:true}
+  messages:
+    edit-window: ${MSG_EDIT_WINDOW:15m}
+    delete-window: ${MSG_DELETE_WINDOW:15m}
   rate-limit:
     messages:
       limit: ${MSG_RATE_LIMIT:20}

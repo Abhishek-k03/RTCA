@@ -1,6 +1,8 @@
 package com.rtca.message;
 
 import com.rtca.auth.AuthUser;
+import com.rtca.common.exception.BadRequestException;
+import com.rtca.message.dto.EditMessageRequest;
 import com.rtca.message.dto.MessagePage;
 import com.rtca.message.dto.MessageResponse;
 import com.rtca.message.dto.ReceiptRequest;
@@ -10,7 +12,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -41,6 +45,24 @@ public class MessageController {
     public void markRead(@AuthenticationPrincipal AuthUser me, @PathVariable Long conversationId,
                          @Valid @RequestBody ReceiptRequest request) {
         receiptService.markRead(me.id(), conversationId, request.messageId());
+    }
+
+    @PatchMapping("/{messageId}")
+    public MessageResponse edit(@AuthenticationPrincipal AuthUser me, @PathVariable Long conversationId,
+                                @PathVariable Long messageId, @Valid @RequestBody EditMessageRequest request) {
+        return messageService.edit(me.id(), conversationId, messageId, request.content());
+    }
+
+    /** scope=me hides it for you, scope=everyone deletes it for all members. */
+    @DeleteMapping("/{messageId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@AuthenticationPrincipal AuthUser me, @PathVariable Long conversationId,
+                       @PathVariable Long messageId, @RequestParam(defaultValue = "me") String scope) {
+        switch (scope) {
+            case "me" -> messageService.deleteForMe(me.id(), conversationId, messageId);
+            case "everyone" -> messageService.deleteForEveryone(me.id(), conversationId, messageId);
+            default -> throw new BadRequestException("scope must be 'me' or 'everyone'");
+        }
     }
 
     @PostMapping

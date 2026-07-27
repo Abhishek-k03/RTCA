@@ -2,6 +2,8 @@ package com.rtca.message;
 
 import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.ConflictException;
+import com.rtca.common.exception.ForbiddenException;
+import com.rtca.common.exception.NotFoundException;
 import com.rtca.common.ratelimit.RateLimiter;
 import com.rtca.conversation.ConversationParticipant;
 import com.rtca.conversation.ConversationRepository;
@@ -18,6 +20,8 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 @Slf4j
@@ -31,6 +35,7 @@ public class MessageService {
     private final ConversationRepository conversationRepository;
     private final MembershipService membershipService;
     private final ParticipantRepository participantRepository;
+    private final MessageProperties properties;
     private final ApplicationEventPublisher eventPublisher;
     private final RateLimiter rateLimiter;
 
@@ -71,6 +76,57 @@ public class MessageService {
         return new SendResult(response, true);
     }
 
+    @Transactional
+    public MessageResponse edit(Long userId, Long conversationId, Long messageId, String content) {
+        Message message = ownMessage(userId, conversationId, messageId, properties.editWindow(), "edit");
+        String newContent = content.strip();
+        if (newContent.isEmpty()) {
+            throw new BadRequestException("Message must not be blank");
+        }
+        message.edit(newContent);
+        MessageResponse response = MessageResponse.from(message);
+        eventPublisher.publishEvent(new MessageEditedEvent(response));
+        return response;
+    }
+
+    @Transactional
+    public void deleteForEveryone(Long userId, Long conversationId, Long messageId) {
+        ownMessage(userId, conversationId, messageId, properties.deleteWindow(), "delete").delete();
+        eventPublisher.publishEvent(new MessageDeletedEvent(conversationId, messageId));
+    }
+
+    /** Hides the message from this user's history only. Nobody else is told. */
+    @Transactional
+    public void deleteForMe(Long userId, Long conversationId, Long messageId) {
+        ConversationParticipant p = membershipService.requireAccess(conversationId, userId);
+        Message message = messageInConversation(conversationId, messageId);
+        if (message.getId() <= p.getClearedUpToMessageId() || message.getId() > p.visibleUpTo()) {
+            throw new NotFoundException("Message not found");
+        }
+        messageRepository.hide(userId, messageId);
+    }
+
+    private Message ownMessage(Long userId, Long conversationId, Long messageId, Duration window, String action) {
+        membershipService.requireMember(conversationId, userId);
+        Message message = messageInConversation(conversationId, messageId);
+        if (!message.getSender().getId().equals(userId)) {
+            throw new ForbiddenException("You can only " + action + " your own messages");
+        }
+        if (message.isDeleted()) {
+            throw new BadRequestException("Message was deleted");
+        }
+        if (message.getCreatedAt().plus(window).isBefore(Instant.now())) {
+            throw new BadRequestException("Too late to " + action + " this message");
+        }
+        return message;
+    }
+
+    private Message messageInConversation(Long conversationId, Long messageId) {
+        return messageRepository.findWithSender(messageId)
+                .filter(m -> m.getConversationId().equals(conversationId))
+                .orElseThrow(() -> new NotFoundException("Message not found"));
+    }
+
     // a new direct chat shows up for the receiver with its first message
     private void revealToHiddenParticipants(Long conversationId) {
         List<Long> hidden = participantRepository.findHiddenUserIds(conversationId);
@@ -101,11 +157,11 @@ public class MessageService {
 
         List<Message> rows;
         if (after != null) {
-            rows = messageRepository.findAfter(conversationId, after, minId, maxId, page);
+            rows = messageRepository.findAfter(conversationId, userId, after, minId, maxId, page);
         } else if (before != null) {
-            rows = messageRepository.findBefore(conversationId, before, minId, maxId, page);
+            rows = messageRepository.findBefore(conversationId, userId, before, minId, maxId, page);
         } else {
-            rows = messageRepository.findLatest(conversationId, minId, maxId, page);
+            rows = messageRepository.findLatest(conversationId, userId, minId, maxId, page);
         }
 
         boolean hasMore = rows.size() > size;

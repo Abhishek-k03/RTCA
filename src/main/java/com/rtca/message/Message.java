@@ -55,4 +55,25 @@ public class Message {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "edited_at")
+    private Instant editedAt;
+
+    @Column(name = "deleted_at")
+    private Instant deletedAt;
+
+    public boolean isDeleted() {
+        return deletedAt != null;
+    }
+
+    public void edit(String newContent) {
+        content = newContent;
+        editedAt = Instant.now();
+    }
+
+    // content is wiped, the row stays so history and receipts keep their ids
+    public void delete() {
+        content = "";
+        deletedAt = Instant.now();
+    }
 }

@@ -3,6 +3,8 @@ package com.rtca.websocket;
 import com.rtca.conversation.MemberAddedEvent;
 import com.rtca.conversation.MemberRemovedEvent;
 import com.rtca.message.MessageCreatedEvent;
+import com.rtca.message.MessageDeletedEvent;
+import com.rtca.message.MessageEditedEvent;
 import com.rtca.websocket.ChatEvent.EventType;
 import com.rtca.websocket.relay.RedisEventRelay;
 import com.rtca.websocket.relay.RelayMessage;
@@ -22,6 +24,16 @@ public class ChatEventPublisher {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
     public void onMessageCreated(MessageCreatedEvent event) {
         toConversation(event.message().conversationId(), ChatEvent.of(EventType.MESSAGE, event.message()));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMessageEdited(MessageEditedEvent event) {
+        toConversation(event.message().conversationId(), ChatEvent.of(EventType.EDITED, event.message()));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onMessageDeleted(MessageDeletedEvent event) {
+        toConversation(event.conversationId(), ChatEvent.of(EventType.DELETED, event));
     }
 
     // drop the removed user's live subscription on every instance, then tell their clients
