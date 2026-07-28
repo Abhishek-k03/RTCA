@@ -16,18 +16,19 @@ public record ConversationResponse(
         Instant lastMessageAt,
         @JsonInclude(JsonInclude.Include.NON_NULL) Long unreadCount,
         // set when the viewer was removed, the conversation is read-only for them
-        @JsonInclude(JsonInclude.Include.NON_NULL) Instant removedAt
+        @JsonInclude(JsonInclude.Include.NON_NULL) Instant removedAt,
+        @JsonInclude(JsonInclude.Include.NON_NULL) LastMessage lastMessage
 ) {
     public static ConversationResponse from(Conversation c, List<ParticipantResponse> participants) {
         return from(c, participants, null);
     }
 
     public static ConversationResponse from(Conversation c, List<ParticipantResponse> participants, Long unreadCount) {
-        return from(c, participants, unreadCount, null);
+        return from(c, participants, unreadCount, null, null);
     }
 
     public static ConversationResponse from(Conversation c, List<ParticipantResponse> participants, Long unreadCount,
-                                            Instant removedAt) {
+                                            Instant removedAt, LastMessage lastMessage) {
         return new ConversationResponse(
                 c.getId(),
                 c.getType(),
@@ -37,7 +38,8 @@ public record ConversationResponse(
                 // removed viewers don't get to see later activity
                 removedAt != null ? removedAt : c.getLastMessageAt(),
                 unreadCount,
-                removedAt
+                removedAt,
+                lastMessage
         );
     }
 }

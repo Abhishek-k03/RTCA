@@ -4,6 +4,7 @@ import com.rtca.common.dto.PageResponse;
 import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.NotFoundException;
 import com.rtca.conversation.dto.ConversationResponse;
+import com.rtca.conversation.dto.LastMessage;
 import com.rtca.conversation.dto.ParticipantResponse;
 import com.rtca.message.MessageRepository;
 import com.rtca.user.UserRepository;
@@ -68,7 +69,8 @@ public class ConversationService {
                 .toList();
         return ConversationResponse.from(c, participants,
                 unreadCounts(me, List.of(conversationId)).getOrDefault(conversationId, 0L),
-                viewer.getRemovedAt());
+                viewer.getRemovedAt(),
+                lastMessages(me, List.of(conversationId)).get(conversationId));
     }
 
     /** Hides all current messages for this user only. */
@@ -112,10 +114,25 @@ public class ConversationService {
                 : participantRepository.findRemoved(userId, ids).stream()
                 .collect(Collectors.toMap(p -> p.getConversation().getId(), ConversationParticipant::getRemovedAt));
 
+        Map<Long, LastMessage> last = lastMessages(userId, ids);
+
         return PageResponse.of(page, c -> ConversationResponse.from(c,
                 participants.getOrDefault(c.getId(), List.of()),
                 unread.getOrDefault(c.getId(), 0L),
-                removed.get(c.getId())));
+                removed.get(c.getId()),
+                last.get(c.getId())));
+    }
+
+    private Map<Long, LastMessage> lastMessages(Long userId, List<Long> conversationIds) {
+        if (conversationIds.isEmpty()) {
+            return Map.of();
+        }
+        List<Long> ids = messageRepository.findLastVisibleIds(userId, conversationIds);
+        if (ids.isEmpty()) {
+            return Map.of();
+        }
+        return messageRepository.findAllWithSender(ids).stream()
+                .collect(Collectors.toMap(m -> m.getConversationId(), LastMessage::from));
     }
 
     private Map<Long, Long> unreadCounts(Long userId, List<Long> conversationIds) {

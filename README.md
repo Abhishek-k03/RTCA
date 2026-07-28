@@ -145,7 +145,7 @@ Every event uses the envelope `{"type": "...", "payload": {...}}`.
 - `EDITED {message}`: the full updated message, with `editedAt` set.
 - `DELETED {conversationId, messageId}`: a message was deleted for everyone.
 
-Conversation responses include `removedAt` when you are no longer a member. Messages include `editedAt`, and `deleted: true` with `content: null` once deleted for everyone.
+Conversation responses include `lastMessage` (the newest message you can see, for list previews) and `removedAt` when you are no longer a member. Messages include `editedAt`, and `deleted: true` with `content: null` once deleted for everyone.
 
 ## Design notes
 

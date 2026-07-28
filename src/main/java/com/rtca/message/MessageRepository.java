@@ -60,6 +60,26 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
             """)
     void hide(@Param("userId") Long userId, @Param("messageId") Long messageId);
 
+    /** Newest message each conversation shows this user (after clear, before removal, not hidden). */
+    @Query(nativeQuery = true, value = """
+            select lm.id from conversation_participants p
+            cross join lateral (
+                select m.id from messages m
+                where m.conversation_id = p.conversation_id
+                  and m.id > p.cleared_up_to_message_id
+                  and (p.removed_after_message_id is null or m.id <= p.removed_after_message_id)
+                  and not exists (select 1 from message_hides h where h.message_id = m.id and h.user_id = p.user_id)
+                order by m.id desc
+                limit 1
+            ) lm
+            where p.user_id = :userId and p.conversation_id in (:conversationIds)
+            """)
+    List<Long> findLastVisibleIds(@Param("userId") Long userId,
+                                  @Param("conversationIds") Collection<Long> conversationIds);
+
+    @Query("select m from Message m join fetch m.sender where m.id in :ids")
+    List<Message> findAllWithSender(@Param("ids") Collection<Long> ids);
+
     @Query("select coalesce(max(m.id), 0) from Message m where m.conversationId = :conversationId")
     Long findLastId(@Param("conversationId") Long conversationId);
 

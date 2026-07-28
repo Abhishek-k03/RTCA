@@ -55,14 +55,35 @@ class ClearAndDeleteChatIntegrationTest extends IntegrationTest {
         assertThat(contents(bob, convId)).containsExactly("after delete");
     }
 
+    @Test
+    void listPreviewShowsNewestMessageTheViewerCanSee() {
+        TestUser alice = newUser();
+        TestUser bob = newUser();
+        Long convId = direct(alice, bob);
+        send(alice, convId, "first");
+        Long second = send(alice, convId, "second");
+        assertThat(entry(bob, convId).orElseThrow().lastMessage().content()).isEqualTo("second");
+
+        call(DELETE, "/api/conversations/" + convId + "/messages/" + second + "?scope=me", bob, null, Void.class);
+        assertThat(entry(bob, convId).orElseThrow().lastMessage().content()).isEqualTo("first");
+        assertThat(entry(alice, convId).orElseThrow().lastMessage().content()).isEqualTo("second");
+
+        call(POST, "/api/conversations/" + convId + "/clear", bob, null, Void.class);
+        assertThat(entry(bob, convId).orElseThrow().lastMessage()).isNull();
+
+        send(alice, convId, "third");
+        assertThat(entry(bob, convId).orElseThrow().lastMessage().content()).isEqualTo("third");
+    }
+
     private Long direct(TestUser a, TestUser b) {
         return call(POST, "/api/conversations/direct", a, Map.of("userId", b.id()), ConversationResponse.class)
                 .getBody().id();
     }
 
-    private void send(TestUser as, Long convId, String content) {
-        call(POST, "/api/conversations/" + convId + "/messages", as,
-                Map.of("clientMessageId", UUID.randomUUID().toString(), "content", content), MessageResponse.class);
+    private Long send(TestUser as, Long convId, String content) {
+        return call(POST, "/api/conversations/" + convId + "/messages", as,
+                Map.of("clientMessageId", UUID.randomUUID().toString(), "content", content), MessageResponse.class)
+                .getBody().id();
     }
 
     private List<String> contents(TestUser as, Long convId) {
