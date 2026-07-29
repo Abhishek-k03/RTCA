@@ -42,7 +42,7 @@ export const useAuth = () => useContext(AuthContext)
 export function RequireAuth({ children }) {
   const { token, user, loading } = useAuth()
   if (!token) return <Navigate to="/login" replace />
-  if (loading || !user) return <p className="p-4">Loading…</p>
+  if (loading || !user) return <p className="eyebrow grid h-full place-items-center">Opening correspondence…</p>
   return children
 }
 

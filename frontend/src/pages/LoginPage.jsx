@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { Link, Navigate, useNavigate } from 'react-router'
+import { ArrowRight } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import AuthLayout from '../components/AuthLayout'
 import FormError from '../components/FormError'
 
 export default function LoginPage() {
@@ -27,17 +29,26 @@ export default function LoginPage() {
   }
 
   return (
-    <form onSubmit={submit} className="mx-auto mt-16 flex max-w-sm flex-col gap-2 border p-4">
-      <h1 className="text-xl">Log in</h1>
-      <input className="border p-1" placeholder="Username or email" value={form.login}
-        onChange={(e) => setForm({ ...form, login: e.target.value })} />
-      <FormError error={error} field="login" />
-      <input className="border p-1" type="password" placeholder="Password" value={form.password}
-        onChange={(e) => setForm({ ...form, password: e.target.value })} />
-      <FormError error={error} field="password" />
-      <FormError error={error} />
-      <button className="border p-1" disabled={busy}>Log in</button>
-      <Link to="/register" className="underline">Create an account</Link>
-    </form>
+    <AuthLayout eyebrow="Sign in" title="Welcome back"
+      footer={<>New here? <Link to="/register" className="text-ink underline decoration-hairline underline-offset-4 hover:decoration-accent">Create an account</Link></>}>
+      <form onSubmit={submit} className="flex flex-col gap-6">
+        <label className="flex flex-col">
+          <span className="eyebrow">Username or email</span>
+          <input className="field" autoComplete="username" autoFocus value={form.login}
+            onChange={(e) => setForm({ ...form, login: e.target.value })} />
+          <FormError error={error} field="login" />
+        </label>
+        <label className="flex flex-col">
+          <span className="eyebrow">Password</span>
+          <input className="field" type="password" autoComplete="current-password" value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          <FormError error={error} field="password" />
+        </label>
+        <FormError error={error} />
+        <button className="btn-primary group mt-2 self-start" disabled={busy}>
+          Continue <ArrowRight size={16} className="transition-transform duration-150 group-hover:translate-x-0.5" />
+        </button>
+      </form>
+    </AuthLayout>
   )
 }
