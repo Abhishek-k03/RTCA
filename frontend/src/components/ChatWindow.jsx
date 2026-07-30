@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router'
+import { ArrowLeft, PanelRight } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { api } from '../api/endpoints'
 import { useStomp, useTopic } from '../ws/StompContext'
 import { usePresence } from '../ws/usePresence'
-import { conversationTitle } from '../lib'
-import FormError from './FormError'
-import GroupInfoPanel from './GroupInfoPanel'
+import { conversationTitle, displayName, indexLabel } from '../lib'
+import ConfirmButton from './ConfirmButton'
+import ContextPanel from './ContextPanel'
 import MessageInput from './MessageInput'
 import MessageList from './MessageList'
 import PresenceDot from './PresenceDot'
@@ -28,7 +30,10 @@ const advance = (conv, userId, field, messageId) => conv && {
     p.userId === userId ? { ...p, [field]: Math.max(p[field] ?? 0, messageId) } : p),
 }
 
-export default function ChatWindow({ conversationId: id, onRead, onChanged, onDeleted }) {
+const markDeleted = (list, messageId) =>
+  list.map((m) => (m.id === messageId ? { ...m, deleted: true, content: null } : m))
+
+export default function ChatWindow({ conversationId: id, onRead, onChanged, onDeleted, onRefresh }) {
   const { user } = useAuth()
   const { connected, publish, pushError } = useStomp()
   const [conv, setConv] = useState(null)
@@ -37,6 +42,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
   const [hasMore, setHasMore] = useState(false)
   const [typing, setTyping] = useState({})
   const [showInfo, setShowInfo] = useState(false)
+  const [editing, setEditing] = useState(null)
   const [error, setError] = useState(null)
   const typingTimers = useRef({})
   const readUpTo = useRef(0)
@@ -85,6 +91,11 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     if (type === 'MESSAGE') {
       setMessages((l) => upsert(l, { ...p, pending: false }))
       if (p.senderId !== user.id) setUserTyping(p.senderId, null, false)
+    } else if (type === 'EDITED') {
+      setMessages((l) => (l.some((m) => m.id === p.id) ? upsert(l, p) : l))
+    } else if (type === 'DELETED') {
+      setMessages((l) => markDeleted(l, p.messageId))
+      setEditing((e) => (e?.id === p.messageId ? null : e))
     } else if (type === 'TYPING' && p.userId !== user.id) {
       setUserTyping(p.userId, p.username, p.typing)
     } else if (type === 'DELIVERED') {
@@ -98,6 +109,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     if (type === 'REMOVED' && p.conversationId === id) {
       setConv((c) => c && { ...c, removedAt: p.removedAt })
       setTyping({})
+      setEditing(null)
       return
     }
     if (type === 'ADDED' && p.conversationId === id) {
@@ -138,11 +150,16 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
   const presence = usePresence(others.map((p) => p.userId))
 
   const receipt = (m) => {
-    if (m.pending) return 'sending…'
-    if (!others.length) return ''
-    if (others.every((p) => (p.lastReadMessageId ?? 0) >= m.id)) return '✓✓ read'
-    if (others.every((p) => Math.max(p.lastDeliveredMessageId ?? 0, p.lastReadMessageId ?? 0) >= m.id)) return '✓✓'
-    return '✓'
+    if (m.pending) return 'sending'
+    if (!others.length || m.deleted) return null
+    if (others.every((p) => (p.lastReadMessageId ?? 0) >= m.id)) return 'read'
+    if (others.every((p) => Math.max(p.lastDeliveredMessageId ?? 0, p.lastReadMessageId ?? 0) >= m.id)) return 'delivered'
+    return 'sent'
+  }
+
+  const nameOf = (userId, m) => {
+    const p = conv?.participants.find((x) => x.userId === userId)
+    return p ? displayName(p) : m.senderUsername
   }
 
   const sendRest = (clientMessageId, content) =>
@@ -159,12 +176,35 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     if (!publish(`/app/conversations.${id}.send`, { clientMessageId, content })) sendRest(clientMessageId, content)
   }
 
+  const saveEdit = (m, content) => {
+    setEditing(null)
+    api.editMessage(id, m.id, content)
+      .then((updated) => setMessages((l) => upsert(l, updated)))
+      .catch((err) => pushError(err.message))
+  }
+
+  const deleteMessage = (m, scope) => {
+    if (editing?.id === m.id) setEditing(null)
+    api.deleteMessage(id, m.id, scope).then(() => {
+      setMessages((l) => (scope === 'me' ? l.filter((x) => x.id !== m.id) : markDeleted(l, m.id)))
+      if (scope === 'me') onRefresh()
+    }).catch((err) => pushError(err.message))
+  }
+
   const loadOlder = () =>
     api.messages(id, { before: cursor }).then((p) => {
       setMessages((l) => [...[...p.items].reverse(), ...l])
       setCursor(p.nextCursor)
       setHasMore(p.hasMore)
     }).catch(setError)
+
+  const clearChat = () =>
+    api.clearConversation(id).then(() => {
+      setMessages([])
+      setHasMore(false)
+      setEditing(null)
+      onRefresh()
+    }).catch((err) => pushError(err.message))
 
   const deleteChat = () =>
     api.deleteConversation(id).then(() => onDeleted(id)).catch((err) => pushError(err.message))
@@ -174,39 +214,67 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     onChanged(updated)
   }
 
-  if (error && !conv) return <div className="p-4"><FormError error={error} /></div>
-  if (!conv) return <p className="p-4">Loading…</p>
+  if (error && !conv) {
+    return (
+      <div className="flex flex-1 flex-col justify-center p-10 md:p-16">
+        <p className="meta">Correspondence / {indexLabel(id)}</p>
+        <p className="mt-4 font-serif text-4xl text-ink">Not available.</p>
+        <p className="mt-2 text-sm text-ink-2">{error.message}</p>
+        <Link to="/" className="btn-quiet mt-8"><ArrowLeft size={15} /> Back to the index</Link>
+      </div>
+    )
+  }
+  if (!conv) return <p className="eyebrow grid flex-1 place-items-center">Opening…</p>
+
+  const isGroup = conv.type === 'GROUP'
 
   return (
     <div className="flex min-h-0 flex-1">
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center gap-2 border-b p-2">
-          <span className="font-bold">{conversationTitle(conv, user.id)}</span>
-          {conv.type === 'DIRECT'
-            ? <PresenceDot status={presence[others[0]?.userId]} />
-            : <span className="text-sm text-gray-500">{conv.participants.length} members</span>}
-          <button className="ml-auto border px-2" onClick={() => setShowInfo(!showInfo)}>
-            {showInfo ? 'Hide info' : 'Info'}
+        <header className="flex items-start gap-4 px-4 pt-5 pb-3 md:px-12 md:pt-8">
+          <Link to="/" className="icon-btn md:hidden" title="Back"><ArrowLeft size={18} /></Link>
+          <div className="ml-auto flex min-w-0 flex-col items-end text-right">
+            <p className="meta">Correspondence / {indexLabel(conv.id)}</p>
+            <h1 className="mt-1.5 max-w-full truncate text-[13px] font-medium tracking-[0.16em] text-ink uppercase">
+              {conversationTitle(conv, user.id)}
+            </h1>
+            <div className="mt-1">
+              {isGroup
+                ? <span className="text-xs text-ink-2">{conv.participants.length} members{removed && ' · read only'}</span>
+                : <PresenceDot status={presence[others[0]?.userId]} pulse />}
+            </div>
+          </div>
+          <button className={`icon-btn ${showInfo ? 'bg-outgoing text-ink' : ''}`} title="Details" onClick={() => setShowInfo(!showInfo)}>
+            <PanelRight size={17} />
           </button>
         </header>
-        <MessageList messages={messages} meId={user.id} status={receipt}
+
+        <MessageList messages={messages} meId={user.id} isGroup={isGroup} readOnly={removed} nameOf={nameOf} status={receipt}
           onRetry={(m) => sendRest(m.clientMessageId, m.content)}
+          onEdit={setEditing} onDelete={deleteMessage}
           hasMore={hasMore} onLoadOlder={loadOlder} />
+
         {removed ? (
-          <div className="flex items-center gap-2 border-t p-2">
-            <span>You are no longer a member of this group.</span>
-            <button className="ml-auto border px-2" onClick={deleteChat}>Delete chat</button>
+          <div className="px-4 pb-6 md:px-12 md:pb-8">
+            <div className="hairline mx-auto flex max-w-3xl flex-wrap items-center gap-x-6 gap-y-2 border-t pt-5">
+              <p className="flex-1 text-sm text-ink-2">
+                <span className="font-serif text-lg text-ink italic">Read only.</span> You are no longer a member of this group.
+              </p>
+              <ConfirmButton danger onConfirm={deleteChat} confirmText="Click again to delete">Delete conversation</ConfirmButton>
+            </div>
           </div>
         ) : (
           <>
             <TypingIndicator names={Object.values(typing)} />
-            <MessageInput onSend={send} onTyping={(t) => publish(`/app/conversations.${id}.typing`, { typing: t })} />
+            <MessageInput onSend={send} editing={editing} onSubmitEdit={saveEdit} onCancelEdit={() => setEditing(null)}
+              onTyping={(t) => publish(`/app/conversations.${id}.typing`, { typing: t })} />
           </>
         )}
       </div>
+
       {showInfo && (
-        <GroupInfoPanel conversation={conv} meId={user.id} presence={presence}
-          onChanged={changed} />
+        <ContextPanel conversation={conv} meId={user.id} presence={presence} onChanged={changed}
+          onClose={() => setShowInfo(false)} onClear={clearChat} onDeleteChat={deleteChat} />
       )}
     </div>
   )

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
+import { X } from 'lucide-react'
 import { api } from '../api/endpoints'
-import { conversationTitle, displayName } from '../lib'
+import { conversationTitle, displayName, indexLabel } from '../lib'
+import Avatar from './Avatar'
 
 function matchesChat(c, q, meId) {
   if (conversationTitle(c, meId).toLowerCase().includes(q)) return true
@@ -8,6 +10,17 @@ function matchesChat(c, q, meId) {
   const other = c.participants.find((p) => p.userId !== meId)
   return !!other?.username.toLowerCase().includes(q)
 }
+
+const Section = ({ label, children }) => (
+  <section className="pt-4">
+    <p className="eyebrow px-6 pb-2">{label}</p>
+    {children}
+  </section>
+)
+
+const Empty = ({ children }) => <p className="px-6 py-1 text-[13px] text-ink-3">{children}</p>
+
+const rowClass = 'flex w-full items-center gap-4 px-6 py-2.5 text-left transition-colors duration-150 hover:bg-outgoing/60'
 
 export default function SearchPanel({ query, conversations, meId, recents, onOpenChat, onOpenUser }) {
   const q = query.trim().toLowerCase()
@@ -23,59 +36,73 @@ export default function SearchPanel({ query, conversations, meId, recents, onOpe
 
   if (!q) {
     return (
-      <div className="flex flex-col">
-        <div className="flex items-center justify-between p-2 text-sm text-gray-500">
-          <span>Recent</span>
-          {recents.items.length > 0 && <button className="underline" onClick={recents.clear}>Clear all</button>}
-        </div>
-        {!recents.items.length && <p className="p-2 text-sm text-gray-500">No recent searches</p>}
+      <Section label={
+        <span className="flex items-center justify-between">
+          Recent
+          {recents.items.length > 0 && (
+            <button className="tracking-normal normal-case text-ink-3 hover:text-ink" onClick={recents.clear}>Clear all</button>
+          )}
+        </span>
+      }>
+        {!recents.items.length && <Empty>Nothing searched yet.</Empty>}
         <ul>
           {recents.items.map((r) => (
-            <li key={`${r.type}:${r.id}`} className="flex items-center border-b">
-              <button className="flex-1 p-2 text-left"
+            <li key={`${r.type}:${r.id}`} className="group flex items-center pr-4 transition-colors duration-150 hover:bg-outgoing/60">
+              <button className="flex min-w-0 flex-1 items-center gap-4 py-2.5 pl-6 text-left"
                 onClick={() => (r.type === 'chat' ? onOpenChat(r) : onOpenUser(r))}>
-                {r.type === 'chat' ? r.title : <>{displayName(r)} <span className="text-gray-500">@{r.username}</span></>}
+                {r.type === 'chat'
+                  ? <span className="meta w-6">{indexLabel(r.id)}</span>
+                  : <Avatar name={displayName(r)} size="sm" />}
+                <span className="truncate text-sm text-ink">{r.type === 'chat' ? r.title : displayName(r)}</span>
               </button>
-              <button className="px-2" title="Remove" onClick={() => recents.remove(r)}>×</button>
+              <button className="icon-btn opacity-0 group-hover:opacity-100 focus:opacity-100" title="Remove"
+                onClick={() => recents.remove(r)}>
+                <X size={14} />
+              </button>
             </li>
           ))}
         </ul>
-      </div>
+      </Section>
     )
   }
 
   const chats = conversations.filter((c) => matchesChat(c, q, meId))
-  // people you already have a direct chat with show up under Chats
+  // people you already have a direct chat with show up under Correspondence
   const directWith = new Set(chats.filter((c) => c.type === 'DIRECT')
     .map((c) => c.participants.find((p) => p.userId !== meId)?.userId))
   const others = people.filter((u) => u.id !== meId && !directWith.has(u.id))
 
   return (
-    <div className="flex flex-col">
-      <p className="p-2 text-sm text-gray-500">Chats</p>
-      {!chats.length && <p className="px-2 text-sm text-gray-500">No matching chats</p>}
-      <ul>
-        {chats.map((c) => (
-          <li key={c.id} className="border-b">
-            <button className="w-full p-2 text-left"
-              onClick={() => onOpenChat({ type: 'chat', id: c.id, title: conversationTitle(c, meId) })}>
-              {c.type === 'GROUP' ? '# ' : ''}{conversationTitle(c, meId)}
-            </button>
-          </li>
-        ))}
-      </ul>
-
-      <p className="p-2 text-sm text-gray-500">People</p>
-      {!others.length && <p className="px-2 text-sm text-gray-500">No matching people</p>}
-      <ul>
-        {others.map((u) => (
-          <li key={u.id} className="border-b">
-            <button className="w-full p-2 text-left" onClick={() => onOpenUser({ type: 'user', ...u })}>
-              {displayName(u)} <span className="text-gray-500">@{u.username}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
+    <>
+      <Section label="Correspondence">
+        {!chats.length && <Empty>No matching chats.</Empty>}
+        <ul>
+          {chats.map((c) => (
+            <li key={c.id}>
+              <button className={rowClass}
+                onClick={() => onOpenChat({ type: 'chat', id: c.id, title: conversationTitle(c, meId) })}>
+                <span className="meta w-6">{indexLabel(c.id)}</span>
+                <span className="truncate text-sm text-ink">{conversationTitle(c, meId)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Section>
+      <Section label="People">
+        {!others.length && <Empty>No one else by that name.</Empty>}
+        <ul>
+          {others.map((u) => (
+            <li key={u.id}>
+              <button className={rowClass} onClick={() => onOpenUser({ type: 'user', ...u })}>
+                <Avatar name={displayName(u)} size="sm" />
+                <span className="truncate text-sm text-ink">
+                  {displayName(u)} <span className="text-ink-3">@{u.username}</span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </Section>
+    </>
   )
 }
