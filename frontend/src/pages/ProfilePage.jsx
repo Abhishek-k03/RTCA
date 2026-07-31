@@ -1,9 +1,18 @@
 import { useState } from 'react'
-import { Link } from 'react-router'
+import { Check } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { api } from '../api/endpoints'
+import Avatar from '../components/Avatar'
 import FormError from '../components/FormError'
-import { formatTime } from '../lib'
+import PageShell from '../components/PageShell'
+import { dateHeading, displayName } from '../lib'
+
+const Row = ({ label, children }) => (
+  <div className="hairline grid grid-cols-[120px_1fr] items-baseline gap-6 border-t py-4">
+    <span className="eyebrow">{label}</span>
+    <span className="text-sm text-ink">{children}</span>
+  </div>
+)
 
 export default function ProfilePage() {
   const { user, setUser } = useAuth()
@@ -23,22 +32,36 @@ export default function ProfilePage() {
     }
   }
 
+  const joined = dateHeading(user.createdAt).date
+
   return (
-    <div className="mx-auto mt-8 flex max-w-sm flex-col gap-2 p-4">
-      <Link to="/" className="underline">← Back to chats</Link>
-      <h1 className="text-xl">Profile</h1>
-      <p>Username: {user.username}</p>
-      <p>Email: {user.email}</p>
-      <p>Role: {user.role}</p>
-      <p>Joined: {formatTime(user.createdAt)}</p>
-      <form onSubmit={submit} className="flex flex-col gap-2 border p-2">
-        <label>Display name</label>
-        <input className="border p-1" value={name} onChange={(e) => setName(e.target.value)} />
-        <FormError error={error} field="displayName" />
+    <PageShell eyebrow="Profile" title={displayName(user)}>
+      <div className="flex items-center gap-5">
+        <Avatar name={displayName(user)} size="lg" />
+        <p className="text-sm text-ink-2">@{user.username}</p>
+      </div>
+
+      <div className="mt-12">
+        <Row label="Email">{user.email}</Row>
+        <Row label="Role"><span className="font-mono text-[12px]">{user.role.toLowerCase()}</span></Row>
+        <Row label="Since">{joined}</Row>
+      </div>
+
+      <form onSubmit={submit} className="hairline mt-12 border-t pt-10">
+        <label className="flex flex-col">
+          <span className="eyebrow">Display name</span>
+          <input className="field font-serif text-2xl" value={name} onChange={(e) => {
+            setName(e.target.value)
+            setSaved(false)
+          }} />
+          <FormError error={error} field="displayName" />
+        </label>
         <FormError error={error} />
-        <button className="border p-1">Save</button>
-        {saved && <p className="text-sm">Saved</p>}
+        <div className="mt-6 flex items-center gap-4">
+          <button className="btn-primary" disabled={!name.trim() || name === user.displayName}>Save</button>
+          {saved && <span className="animate-rise inline-flex items-center gap-1.5 text-sm text-sage"><Check size={15} /> Saved</span>}
+        </div>
       </form>
-    </div>
+    </PageShell>
   )
 }
