@@ -1,0 +1,127 @@
+import { useState } from 'react'
+import { X } from 'lucide-react'
+import { api } from '../api/endpoints'
+import { conversationTitle, displayName, indexLabel } from '../lib'
+import Avatar from './Avatar'
+import ConfirmButton from './ConfirmButton'
+import FormError from './FormError'
+import PresenceDot from './PresenceDot'
+import UserSearch from './UserSearch'
+
+const Rule = () => <hr className="hairline my-8 border-t" />
+
+export default function ContextPanel({ conversation: c, meId, presence, onChanged, onClose, onClear, onDeleteChat }) {
+  const [name, setName] = useState(c.name || '')
+  const [error, setError] = useState(null)
+
+  const isGroup = c.type === 'GROUP'
+  const removed = !!c.removedAt
+  const myRole = c.participants.find((p) => p.userId === meId)?.role
+  const isOwner = myRole === 'OWNER'
+  const canManage = !removed && (isOwner || myRole === 'ADMIN')
+  const other = !isGroup ? c.participants.find((p) => p.userId !== meId) : null
+
+  const act = async (fn) => {
+    setError(null)
+    try {
+      const updated = await fn()
+      if (updated) onChanged(updated)
+    } catch (err) {
+      setError(err)
+    }
+  }
+
+  const remove = (userId) => act(async () => {
+    await api.removeMember(c.id, userId)
+    return api.conversation(c.id)
+  })
+
+  // leaving keeps the chat as read-only, so just refetch it
+  const leave = () => act(async () => {
+    await api.removeMember(c.id, meId)
+    return api.conversation(c.id)
+  })
+
+  return (
+    <aside className="hairline animate-rise fixed inset-0 z-30 overflow-y-auto bg-surface px-8 py-8 md:static md:z-auto md:w-[320px] md:shrink-0 md:border-l">
+      <div className="flex items-start justify-between">
+        <p className="meta">Correspondence / {indexLabel(c.id)}</p>
+        <button className="icon-btn -mt-1.5 -mr-2" onClick={onClose} title="Close"><X size={16} /></button>
+      </div>
+
+      <h2 className="mt-8 font-serif text-[34px] leading-[1.05] break-words text-ink">{conversationTitle(c, meId)}</h2>
+      <div className="mt-3">
+        {isGroup
+          ? <p className="eyebrow">{c.participants.length} members{removed && ' · read only'}</p>
+          : <PresenceDot status={presence[other?.userId]} />}
+      </div>
+      {other && <p className="mt-1 text-[13px] text-ink-3">@{other.username}</p>}
+
+      {canManage && (
+        <form className="mt-8 flex items-end gap-3" onSubmit={(e) => {
+          e.preventDefault()
+          act(() => api.renameGroup(c.id, name.trim()))
+        }}>
+          <label className="flex min-w-0 flex-1 flex-col">
+            <span className="eyebrow text-[9.5px]">Group name</span>
+            <input className="field" value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <button className="btn-quiet pb-2" disabled={!name.trim() || name.trim() === c.name}>Rename</button>
+        </form>
+      )}
+
+      {isGroup && (
+        <>
+          <Rule />
+          <p className="eyebrow">Members</p>
+          <ul className="mt-4 flex flex-col gap-4">
+            {c.participants.map((p) => (
+              <li key={p.userId} className="flex items-center gap-3">
+                <Avatar name={displayName(p)} size="sm" online={p.userId !== meId && presence[p.userId]?.online} />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm text-ink">
+                    {displayName(p)}{p.userId === meId && <span className="text-ink-3"> · you</span>}
+                  </span>
+                  <span className="flex items-center gap-3">
+                    {isOwner && p.userId !== meId && p.role !== 'OWNER' ? (
+                      <select className="eyebrow cursor-pointer bg-transparent text-[9.5px] outline-none hover:text-ink" value={p.role}
+                        onChange={(e) => act(() => api.changeParticipantRole(c.id, p.userId, e.target.value))}>
+                        <option value="ADMIN">Admin</option>
+                        <option value="MEMBER">Member</option>
+                      </select>
+                    ) : (
+                      <span className={`eyebrow text-[9.5px] ${p.role === 'OWNER' ? 'text-accent' : ''}`}>{p.role.toLowerCase()}</span>
+                    )}
+                    {canManage && p.userId !== meId && p.role !== 'OWNER' && (
+                      <button className="text-[11px] text-ink-3 hover:text-danger" onClick={() => remove(p.userId)}>remove</button>
+                    )}
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {canManage && (
+            <div className="mt-6">
+              <UserSearch placeholder="Add people…" excludeIds={c.participants.map((p) => p.userId)}
+                onPick={(u) => act(() => api.addMembers(c.id, [u.id]))} />
+            </div>
+          )}
+        </>
+      )}
+
+      <Rule />
+      <p className="eyebrow">Actions</p>
+      <div className="mt-3 flex flex-col items-start">
+        <ConfirmButton onConfirm={onClear} confirmText="Clear for you? Click again">Clear conversation</ConfirmButton>
+        {(!isGroup || removed) && (
+          <ConfirmButton danger onConfirm={onDeleteChat} confirmText="Delete for you? Click again">Delete conversation</ConfirmButton>
+        )}
+        {isGroup && !removed && (
+          <ConfirmButton danger onConfirm={leave} confirmText="Leave this group? Click again">Leave group</ConfirmButton>
+        )}
+      </div>
+      <FormError error={error} />
+    </aside>
+  )
+}
