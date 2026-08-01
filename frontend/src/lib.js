@@ -6,9 +6,6 @@ export function conversationTitle(c, meId) {
   return other ? displayName(other) : 'Just you'
 }
 
-// the correspondence number shown next to every chat: 01, 02, ... 128
-export const indexLabel = (id) => String(id).padStart(2, '0')
-
 export function initials(name = '') {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return '·'

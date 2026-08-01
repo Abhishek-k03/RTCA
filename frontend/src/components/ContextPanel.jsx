@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../api/endpoints'
-import { conversationTitle, displayName, indexLabel } from '../lib'
+import { conversationTitle, displayName } from '../lib'
 import Avatar from './Avatar'
 import ConfirmButton from './ConfirmButton'
 import FormError from './FormError'
@@ -45,7 +45,7 @@ export default function ContextPanel({ conversation: c, meId, presence, onChange
   return (
     <aside className="hairline animate-rise fixed inset-0 z-30 overflow-y-auto bg-surface px-8 py-8 md:static md:z-auto md:w-[320px] md:shrink-0 md:border-l">
       <div className="flex items-start justify-between">
-        <p className="meta">Correspondence / {indexLabel(c.id)}</p>
+        <p className="meta">{isGroup ? 'Group correspondence' : 'Correspondence'}</p>
         <button className="icon-btn -mt-1.5 -mr-2" onClick={onClose} title="Close"><X size={16} /></button>
       </div>
 

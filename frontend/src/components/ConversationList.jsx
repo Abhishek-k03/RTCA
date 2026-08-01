@@ -1,5 +1,6 @@
 import { Link } from 'react-router'
-import { conversationTitle, indexLabel, shortWhen } from '../lib'
+import { conversationTitle, shortWhen } from '../lib'
+import Avatar from './Avatar'
 
 function preview(c, meId) {
   if (c.removedAt) return <span className="italic">No longer a member</span>
@@ -17,7 +18,7 @@ function ConversationRow({ c, meId, active }) {
       <Link to={`/c/${c.id}`}
         className="group relative flex gap-4 px-6 py-3.5 transition-colors duration-150 hover:bg-outgoing/60">
         <span className={`absolute top-3 bottom-3 left-0 w-[2px] origin-center bg-accent transition-all duration-200 ${active ? 'scale-y-100 opacity-100' : 'scale-y-50 opacity-0'}`} />
-        <span className={`meta w-6 shrink-0 pt-[3px] ${active ? 'text-accent' : ''}`}>{indexLabel(c.id)}</span>
+        <Avatar name={conversationTitle(c, meId)} />
         <span className="min-w-0 flex-1">
           <span className="flex items-baseline justify-between gap-3">
             <span className={`truncate text-[14.5px] text-ink ${unread ? 'font-semibold' : 'font-medium'}`}>

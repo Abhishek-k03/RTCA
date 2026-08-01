@@ -5,7 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { api } from '../api/endpoints'
 import { useStomp, useTopic } from '../ws/StompContext'
 import { usePresence } from '../ws/usePresence'
-import { conversationTitle, displayName, indexLabel } from '../lib'
+import { conversationTitle, displayName } from '../lib'
 import ConfirmButton from './ConfirmButton'
 import ContextPanel from './ContextPanel'
 import MessageInput from './MessageInput'
@@ -217,7 +217,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
   if (error && !conv) {
     return (
       <div className="flex flex-1 flex-col justify-center p-10 md:p-16">
-        <p className="meta">Correspondence / {indexLabel(id)}</p>
+        <p className="meta">Correspondence</p>
         <p className="mt-4 font-serif text-4xl text-ink">Not available.</p>
         <p className="mt-2 text-sm text-ink-2">{error.message}</p>
         <Link to="/" className="btn-quiet mt-8"><ArrowLeft size={15} /> Back to the index</Link>
@@ -234,7 +234,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
         <header className="flex items-start gap-4 px-4 pt-5 pb-3 md:px-12 md:pt-8">
           <Link to="/" className="icon-btn md:hidden" title="Back"><ArrowLeft size={18} /></Link>
           <div className="ml-auto flex min-w-0 flex-col items-end text-right">
-            <p className="meta">Correspondence / {indexLabel(conv.id)}</p>
+            <p className="meta">{isGroup ? 'Group correspondence' : 'Correspondence'}</p>
             <h1 className="mt-1.5 max-w-full truncate text-[13px] font-medium tracking-[0.16em] text-ink uppercase">
               {conversationTitle(conv, user.id)}
             </h1>

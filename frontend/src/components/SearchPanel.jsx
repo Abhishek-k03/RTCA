@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../api/endpoints'
-import { conversationTitle, displayName, indexLabel } from '../lib'
+import { conversationTitle, displayName } from '../lib'
 import Avatar from './Avatar'
 
 function matchesChat(c, q, meId) {
@@ -50,9 +50,7 @@ export default function SearchPanel({ query, conversations, meId, recents, onOpe
             <li key={`${r.type}:${r.id}`} className="group flex items-center pr-4 transition-colors duration-150 hover:bg-outgoing/60">
               <button className="flex min-w-0 flex-1 items-center gap-4 py-2.5 pl-6 text-left"
                 onClick={() => (r.type === 'chat' ? onOpenChat(r) : onOpenUser(r))}>
-                {r.type === 'chat'
-                  ? <span className="meta w-6">{indexLabel(r.id)}</span>
-                  : <Avatar name={displayName(r)} size="sm" />}
+                <Avatar name={r.type === 'chat' ? r.title : displayName(r)} size="sm" />
                 <span className="truncate text-sm text-ink">{r.type === 'chat' ? r.title : displayName(r)}</span>
               </button>
               <button className="icon-btn opacity-0 group-hover:opacity-100 focus:opacity-100" title="Remove"
@@ -81,7 +79,7 @@ export default function SearchPanel({ query, conversations, meId, recents, onOpe
             <li key={c.id}>
               <button className={rowClass}
                 onClick={() => onOpenChat({ type: 'chat', id: c.id, title: conversationTitle(c, meId) })}>
-                <span className="meta w-6">{indexLabel(c.id)}</span>
+                <Avatar name={conversationTitle(c, meId)} size="sm" />
                 <span className="truncate text-sm text-ink">{conversationTitle(c, meId)}</span>
               </button>
             </li>

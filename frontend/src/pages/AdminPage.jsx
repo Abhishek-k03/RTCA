@@ -3,7 +3,7 @@ import { ArrowLeft, ArrowRight } from 'lucide-react'
 import { api } from '../api/endpoints'
 import FormError from '../components/FormError'
 import PageShell from '../components/PageShell'
-import { indexLabel, shortWhen } from '../lib'
+import { shortWhen } from '../lib'
 
 export default function AdminPage() {
   const [page, setPage] = useState(0)
@@ -34,7 +34,7 @@ export default function AdminPage() {
             <table className="w-full min-w-[640px] text-left text-sm">
               <thead>
                 <tr className="hairline border-b">
-                  {['No.', 'Name', 'Email', 'Joined', 'Role'].map((h) => (
+                  {['Name', 'Email', 'Joined', 'Role'].map((h) => (
                     <th key={h} className="eyebrow pb-3 font-medium">{h}</th>
                   ))}
                 </tr>
@@ -42,7 +42,6 @@ export default function AdminPage() {
               <tbody>
                 {data.content.map((u) => (
                   <tr key={u.id} className="hairline border-b transition-colors hover:bg-outgoing/50">
-                    <td className="meta py-4">{indexLabel(u.id)}</td>
                     <td className="py-4">
                       <span className="text-ink">{u.displayName || u.username}</span>
                       <span className="ml-2 text-ink-3">@{u.username}</span>
