@@ -22,7 +22,7 @@ const same = (a, b) => a.type === b.type && a.id === b.id
 
 // entries: { type: 'chat', id, title } or { type: 'user', id, username, displayName }
 export function useRecentSearches(userId) {
-  const key = `recentSearches:${userId}`
+  const key = `recentSearches:v2:${userId}`
   const [items, setItems] = useState(() => read(key))
 
   const update = useCallback((fn) => {

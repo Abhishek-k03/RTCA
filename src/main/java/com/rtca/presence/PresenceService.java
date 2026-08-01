@@ -1,5 +1,6 @@
 package com.rtca.presence;
 
+import com.rtca.common.ids.PublicIds;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -29,6 +30,7 @@ public class PresenceService {
     private static final String LAST_SEEN_KEY = "presence:lastseen:";
 
     private final StringRedisTemplate redis;
+    private final PublicIds ids;
     private final RedisScript<Long> connectScript;
     private final RedisScript<Long> disconnectScript;
 
@@ -36,8 +38,9 @@ public class PresenceService {
     /** sessionId -> userId, for this instance only */
     private final Map<String, Long> localSessions = new ConcurrentHashMap<>();
 
-    public PresenceService(StringRedisTemplate redis) {
+    public PresenceService(StringRedisTemplate redis, PublicIds ids) {
         this.redis = redis;
+        this.ids = ids;
         this.connectScript = RedisScript.of(new ClassPathResource("redis/presence_connect.lua"), Long.class);
         this.disconnectScript = RedisScript.of(new ClassPathResource("redis/presence_disconnect.lua"), Long.class);
     }
@@ -77,7 +80,7 @@ public class PresenceService {
         for (Long id : userIds) {
             boolean online = isOnline(id);
             String lastSeen = online ? null : redis.opsForValue().get(LAST_SEEN_KEY + id);
-            result.put(id, new PresenceStatus(id, online, lastSeen == null ? null : Instant.parse(lastSeen)));
+            result.put(id, new PresenceStatus(ids.user(id), online, lastSeen == null ? null : Instant.parse(lastSeen)));
         }
         return result;
     }

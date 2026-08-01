@@ -1,5 +1,6 @@
 package com.rtca.websocket;
 
+import com.rtca.common.ids.PublicIds;
 import com.rtca.conversation.MembershipService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.lang.NonNull;
@@ -18,6 +19,7 @@ import org.springframework.stereotype.Component;
 public class SubscriptionGuardInterceptor implements ChannelInterceptor {
 
     private final MembershipService membershipService;
+    private final PublicIds ids;
 
     @Override
     public Message<?> preSend(@NonNull Message<?> message, @NonNull MessageChannel channel) {
@@ -34,13 +36,14 @@ public class SubscriptionGuardInterceptor implements ChannelInterceptor {
             return message;
         }
 
-        var conversationId = Destinations.conversationId(destination);
-        if (conversationId.isEmpty()) {
+        var publicId = Destinations.conversationId(destination);
+        if (publicId.isEmpty()) {
             throw new MessageDeliveryException("Unknown destination");
         }
 
         Long userId = Long.valueOf(accessor.getUser().getName());
-        if (!membershipService.isMember(conversationId.getAsLong(), userId)) {
+        var conversationId = publicId.flatMap(ids::findConversationId);
+        if (conversationId.isEmpty() || !membershipService.isMember(conversationId.get(), userId)) {
             throw new MessageDeliveryException("Not a member of this conversation");
         }
         return message;

@@ -20,6 +20,7 @@ import org.springframework.web.socket.messaging.WebSocketStompClient;
 
 import java.lang.reflect.Type;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -47,7 +48,7 @@ class WebSocketIntegrationTest extends IntegrationTest {
     void messageSentOverStompReachesOtherMember() throws Exception {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
+        UUID convId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
                 ConversationResponse.class).getBody().id();
 
         StompSession bobSession = connect(bob.token());
@@ -62,7 +63,7 @@ class WebSocketIntegrationTest extends IntegrationTest {
 
         JsonNode received = nextOfType(bobInbox, "MESSAGE");
         assertThat(received.at("/payload/content").asText()).isEqualTo("hi bob");
-        assertThat(received.at("/payload/senderId").asLong()).isEqualTo(alice.id());
+        assertThat(received.at("/payload/senderId").asText()).isEqualTo(alice.id().toString());
 
         JsonNode ack = nextOfType(aliceEvents, "ACK");
         assertThat(ack.at("/payload/clientMessageId").asText()).isEqualTo("ws-1");

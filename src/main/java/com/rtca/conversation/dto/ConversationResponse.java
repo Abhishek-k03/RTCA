@@ -6,9 +6,10 @@ import com.rtca.conversation.ConversationType;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 
 public record ConversationResponse(
-        Long id,
+        UUID id,
         ConversationType type,
         String name,
         List<ParticipantResponse> participants,
@@ -30,7 +31,7 @@ public record ConversationResponse(
     public static ConversationResponse from(Conversation c, List<ParticipantResponse> participants, Long unreadCount,
                                             Instant removedAt, LastMessage lastMessage) {
         return new ConversationResponse(
-                c.getId(),
+                c.getPublicId(),
                 c.getType(),
                 c.getName(),
                 participants,

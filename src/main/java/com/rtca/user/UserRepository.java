@@ -1,5 +1,6 @@
 package com.rtca.user;
 
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Page<User> search(@Param("q") String query, Pageable pageable);
 
     Optional<User> findByUsername(String username);
+
+    @Query("select u.id from User u where u.publicId = :publicId")
+    Optional<Long> findIdByPublicId(@Param("publicId") UUID publicId);
+
+    @Query("select u.publicId from User u where u.id = :id")
+    Optional<UUID> findPublicIdById(@Param("id") Long id);
 
     Optional<User> findByEmail(String email);
 

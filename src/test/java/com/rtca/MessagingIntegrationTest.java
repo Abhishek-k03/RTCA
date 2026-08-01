@@ -14,6 +14,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,7 +31,7 @@ class MessagingIntegrationTest extends IntegrationTest {
         TestUser alice = newUser();
         TestUser bob = newUser();
 
-        List<Callable<Long>> tasks = new ArrayList<>();
+        List<Callable<UUID>> tasks = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             TestUser from = i % 2 == 0 ? alice : bob;
             TestUser to = i % 2 == 0 ? bob : alice;
@@ -38,9 +39,9 @@ class MessagingIntegrationTest extends IntegrationTest {
                     ConversationResponse.class).getBody().id());
         }
 
-        Set<Long> ids = new HashSet<>();
+        Set<UUID> ids = new HashSet<>();
         try (ExecutorService pool = Executors.newFixedThreadPool(10)) {
-            for (Future<Long> f : pool.invokeAll(tasks)) {
+            for (Future<UUID> f : pool.invokeAll(tasks)) {
                 ids.add(f.get());
             }
         }
@@ -51,7 +52,7 @@ class MessagingIntegrationTest extends IntegrationTest {
     void resendingSameClientMessageIdIsIdempotent() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
 
         var body = Map.of("clientMessageId", "abc-123", "content", "hello");
         ResponseEntity<MessageResponse> first = send(alice, convId, body);
@@ -67,7 +68,7 @@ class MessagingIntegrationTest extends IntegrationTest {
     void historyPagesWithoutGapsOrDuplicates() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         for (int i = 0; i < 25; i++) {
             send(alice, convId, Map.of("clientMessageId", "m" + i, "content", "msg " + i));
         }
@@ -89,7 +90,7 @@ class MessagingIntegrationTest extends IntegrationTest {
         TestUser alice = newUser();
         TestUser bob = newUser();
         TestUser mallory = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
 
         assertThat(call(GET, "/api/conversations/" + convId + "/messages", mallory, null, String.class)
                 .getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
@@ -101,7 +102,7 @@ class MessagingIntegrationTest extends IntegrationTest {
     void unreadCountDropsAfterRead() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         send(alice, convId, Map.of("clientMessageId", "u1", "content", "one"));
         Long lastId = send(alice, convId, Map.of("clientMessageId", "u2", "content", "two")).getBody().id();
 
@@ -113,21 +114,21 @@ class MessagingIntegrationTest extends IntegrationTest {
         assertThat(conversation(alice, convId).unreadCount()).isZero();
     }
 
-    private Long direct(TestUser a, TestUser b) {
+    private UUID direct(TestUser a, TestUser b) {
         return call(POST, "/api/conversations/direct", a, Map.of("userId", b.id()), ConversationResponse.class)
                 .getBody().id();
     }
 
-    private ResponseEntity<MessageResponse> send(TestUser as, Long convId, Map<String, String> body) {
+    private ResponseEntity<MessageResponse> send(TestUser as, UUID convId, Map<String, String> body) {
         return call(POST, "/api/conversations/" + convId + "/messages", as, body, MessageResponse.class);
     }
 
-    private MessagePage history(TestUser as, Long convId, String query) {
+    private MessagePage history(TestUser as, UUID convId, String query) {
         return call(HttpMethod.GET, "/api/conversations/" + convId + "/messages" + query, as, null, MessagePage.class)
                 .getBody();
     }
 
-    private ConversationResponse conversation(TestUser as, Long convId) {
+    private ConversationResponse conversation(TestUser as, UUID convId) {
         return call(GET, "/api/conversations/" + convId, as, null, ConversationResponse.class).getBody();
     }
 }

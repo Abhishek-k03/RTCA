@@ -4,11 +4,12 @@ import com.rtca.message.Message;
 import com.rtca.message.MessageType;
 
 import java.time.Instant;
+import java.util.UUID;
 
 public record MessageResponse(
         Long id,
-        Long conversationId,
-        Long senderId,
+        UUID conversationId,
+        UUID senderId,
         String senderUsername,
         String content,
         MessageType type,
@@ -20,8 +21,8 @@ public record MessageResponse(
     public static MessageResponse from(Message m) {
         return new MessageResponse(
                 m.getId(),
-                m.getConversationId(),
-                m.getSender().getId(),
+                m.getConversation().getPublicId(),
+                m.getSender().getPublicId(),
                 m.getSender().getUsername(),
                 m.isDeleted() ? null : m.getContent(),
                 m.getType(),

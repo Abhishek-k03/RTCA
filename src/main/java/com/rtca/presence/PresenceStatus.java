@@ -1,6 +1,7 @@
 package com.rtca.presence;
 
 import java.time.Instant;
+import java.util.UUID;
 
-public record PresenceStatus(Long userId, boolean online, Instant lastSeen) {
+public record PresenceStatus(UUID userId, boolean online, Instant lastSeen) {
 }

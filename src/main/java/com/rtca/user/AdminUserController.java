@@ -1,9 +1,11 @@
 package com.rtca.user;
 
 import com.rtca.common.dto.PageResponse;
+import com.rtca.common.ids.PublicIds;
 import com.rtca.user.dto.ChangeRoleRequest;
 import com.rtca.user.dto.UserResponse;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -23,6 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AdminUserController {
 
     private final UserService userService;
+    private final PublicIds ids;
 
     @GetMapping
     public PageResponse<UserResponse> list(@PageableDefault(size = 20, sort = "id", direction = Sort.Direction.ASC)
@@ -31,7 +34,7 @@ public class AdminUserController {
     }
 
     @PatchMapping("/{id}/role")
-    public UserResponse changeRole(@PathVariable Long id, @Valid @RequestBody ChangeRoleRequest request) {
-        return userService.changeRole(id, request.role());
+    public UserResponse changeRole(@PathVariable UUID id, @Valid @RequestBody ChangeRoleRequest request) {
+        return userService.changeRole(ids.userId(id), request.role());
     }
 }

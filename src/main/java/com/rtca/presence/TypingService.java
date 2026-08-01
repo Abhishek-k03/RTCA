@@ -1,9 +1,11 @@
 package com.rtca.presence;
 
+import com.rtca.common.ids.PublicIds;
 import com.rtca.conversation.MembershipService;
 import com.rtca.websocket.ChatEvent;
 import com.rtca.websocket.ChatEvent.EventType;
 import com.rtca.websocket.ChatEventPublisher;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -21,6 +23,7 @@ public class TypingService {
     private final StringRedisTemplate redis;
     private final MembershipService membershipService;
     private final ChatEventPublisher publisher;
+    private final PublicIds ids;
 
     public void typing(Long conversationId, Long userId, String username, boolean typing) {
         membershipService.requireMember(conversationId, userId);
@@ -36,9 +39,9 @@ public class TypingService {
         }
 
         publisher.toConversation(conversationId, ChatEvent.of(EventType.TYPING,
-                new TypingEvent(conversationId, userId, username, typing)));
+                new TypingEvent(ids.conversation(conversationId), ids.user(userId), username, typing)));
     }
 
-    public record TypingEvent(Long conversationId, Long userId, String username, boolean typing) {
+    public record TypingEvent(UUID conversationId, UUID userId, String username, boolean typing) {
     }
 }

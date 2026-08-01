@@ -5,12 +5,12 @@ import { useStomp } from './StompContext'
 export function usePresence(userIds) {
   const { subscribe } = useStomp()
   const [statuses, setStatuses] = useState({})
-  const key = [...new Set(userIds)].sort((a, b) => a - b).join(',')
+  const key = [...new Set(userIds)].sort().join(',')
 
   useEffect(() => {
     if (!key) return
     let active = true
-    const ids = key.split(',').map(Number)
+    const ids = key.split(',')
     api.presence(ids)
       .then((list) => {
         if (active) setStatuses((s) => ({ ...s, ...Object.fromEntries(list.map((x) => [x.userId, x])) }))

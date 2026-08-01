@@ -1,5 +1,6 @@
 package com.rtca.presence;
 
+import com.rtca.common.ids.PublicIds;
 import com.rtca.websocket.ChatEvent;
 import com.rtca.websocket.ChatEvent.EventType;
 import com.rtca.websocket.ChatEventPublisher;
@@ -22,6 +23,7 @@ public class PresenceEventListener {
 
     private final PresenceService presenceService;
     private final ChatEventPublisher publisher;
+    private final PublicIds ids;
 
     @EventListener
     public void onConnected(SessionConnectedEvent event) {
@@ -33,7 +35,7 @@ public class PresenceEventListener {
         Long userId = Long.valueOf(user.getName());
         try {
             if (presenceService.connected(userId, sessionId)) {
-                publish(new PresenceStatus(userId, true, null));
+                publish(userId, new PresenceStatus(ids.user(userId), true, null));
             }
         } catch (Exception e) {
             log.warn("Failed to record connect for user {}: {}", userId, e.getMessage());
@@ -49,15 +51,15 @@ public class PresenceEventListener {
         Long userId = Long.valueOf(user.getName());
         try {
             if (presenceService.disconnected(userId, event.getSessionId())) {
-                publish(new PresenceStatus(userId, false, Instant.now()));
+                publish(userId, new PresenceStatus(ids.user(userId), false, Instant.now()));
             }
         } catch (Exception e) {
             log.warn("Failed to record disconnect for user {}: {}", userId, e.getMessage());
         }
     }
 
-    private void publish(PresenceStatus status) {
-        log.debug("User {} is {}", status.userId(), status.online() ? "online" : "offline");
-        publisher.presence(status.userId(), ChatEvent.of(EventType.PRESENCE, status));
+    private void publish(Long userId, PresenceStatus status) {
+        log.debug("User {} is {}", userId, status.online() ? "online" : "offline");
+        publisher.presence(userId, ChatEvent.of(EventType.PRESENCE, status));
     }
 }

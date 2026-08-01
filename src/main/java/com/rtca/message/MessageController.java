@@ -2,12 +2,14 @@ package com.rtca.message;
 
 import com.rtca.auth.AuthUser;
 import com.rtca.common.exception.BadRequestException;
+import com.rtca.common.ids.PublicIds;
 import com.rtca.message.dto.EditMessageRequest;
 import com.rtca.message.dto.MessagePage;
 import com.rtca.message.dto.MessageResponse;
 import com.rtca.message.dto.ReceiptRequest;
 import com.rtca.message.dto.SendMessageRequest;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -30,46 +32,47 @@ public class MessageController {
 
     private final MessageService messageService;
     private final ReceiptService receiptService;
+    private final PublicIds ids;
 
     @GetMapping
     public MessagePage history(@AuthenticationPrincipal AuthUser me,
-                               @PathVariable Long conversationId,
+                               @PathVariable UUID conversationId,
                                @RequestParam(required = false) Long before,
                                @RequestParam(required = false) Long after,
                                @RequestParam(defaultValue = "50") int limit) {
-        return messageService.history(me.id(), conversationId, before, after, limit);
+        return messageService.history(me.id(), ids.conversationId(conversationId), before, after, limit);
     }
 
     @PostMapping("/read")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void markRead(@AuthenticationPrincipal AuthUser me, @PathVariable Long conversationId,
+    public void markRead(@AuthenticationPrincipal AuthUser me, @PathVariable UUID conversationId,
                          @Valid @RequestBody ReceiptRequest request) {
-        receiptService.markRead(me.id(), conversationId, request.messageId());
+        receiptService.markRead(me.id(), ids.conversationId(conversationId), request.messageId());
     }
 
     @PatchMapping("/{messageId}")
-    public MessageResponse edit(@AuthenticationPrincipal AuthUser me, @PathVariable Long conversationId,
+    public MessageResponse edit(@AuthenticationPrincipal AuthUser me, @PathVariable UUID conversationId,
                                 @PathVariable Long messageId, @Valid @RequestBody EditMessageRequest request) {
-        return messageService.edit(me.id(), conversationId, messageId, request.content());
+        return messageService.edit(me.id(), ids.conversationId(conversationId), messageId, request.content());
     }
 
     /** scope=me hides it for you, scope=everyone deletes it for all members. */
     @DeleteMapping("/{messageId}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
-    public void delete(@AuthenticationPrincipal AuthUser me, @PathVariable Long conversationId,
+    public void delete(@AuthenticationPrincipal AuthUser me, @PathVariable UUID conversationId,
                        @PathVariable Long messageId, @RequestParam(defaultValue = "me") String scope) {
         switch (scope) {
-            case "me" -> messageService.deleteForMe(me.id(), conversationId, messageId);
-            case "everyone" -> messageService.deleteForEveryone(me.id(), conversationId, messageId);
+            case "me" -> messageService.deleteForMe(me.id(), ids.conversationId(conversationId), messageId);
+            case "everyone" -> messageService.deleteForEveryone(me.id(), ids.conversationId(conversationId), messageId);
             default -> throw new BadRequestException("scope must be 'me' or 'everyone'");
         }
     }
 
     @PostMapping
     public ResponseEntity<MessageResponse> send(@AuthenticationPrincipal AuthUser me,
-                                                @PathVariable Long conversationId,
+                                                @PathVariable UUID conversationId,
                                                 @Valid @RequestBody SendMessageRequest request) {
-        SendResult result = messageService.send(me.id(), conversationId, request);
+        SendResult result = messageService.send(me.id(), ids.conversationId(conversationId), request);
         return ResponseEntity.status(result.created() ? HttpStatus.CREATED : HttpStatus.OK)
                 .body(result.message());
     }

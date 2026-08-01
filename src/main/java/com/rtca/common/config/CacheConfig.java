@@ -21,7 +21,7 @@ import java.time.Duration;
 @EnableCaching
 public class CacheConfig implements CachingConfigurer {
 
-    public static final String USERS = "users";
+    public static final String USERS = "users:v2";
     public static final String MEMBERSHIP = "membership";
 
     @Bean

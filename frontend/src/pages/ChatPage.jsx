@@ -30,7 +30,7 @@ export default function ChatPage() {
   const { user } = useAuth()
   const { connected, subscribe, publish, pushError } = useStomp()
   const { id } = useParams()
-  const activeId = id ? Number(id) : null
+  const activeId = id ?? null
   const navigate = useNavigate()
   const [conversations, setConversations] = useState([])
   const recents = useRecentSearches(user.id)
@@ -115,10 +115,10 @@ export default function ChatPage() {
   })
 
   // sorted so reordering the list doesn't resubscribe
-  const idsKey = conversations.filter((c) => !c.removedAt).map((c) => c.id).sort((a, b) => a - b).join(',')
+  const idsKey = conversations.filter((c) => !c.removedAt).map((c) => c.id).sort().join(',')
   useEffect(() => {
     if (!idsKey) return
-    const unsubs = idsKey.split(',').map(Number).map((cid) =>
+    const unsubs = idsKey.split(',').map((cid) =>
       subscribe(`/topic/conversations.${cid}`, (e) => onEvent.current(cid, e)))
     return () => unsubs.forEach((u) => u())
   }, [idsKey, subscribe])

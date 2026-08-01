@@ -1,6 +1,7 @@
 package com.rtca.websocket;
 
-import java.util.OptionalLong;
+import java.util.Optional;
+import java.util.UUID;
 import java.util.regex.Pattern;
 
 public final class Destinations {
@@ -9,21 +10,22 @@ public final class Destinations {
     public static final String PRESENCE_PREFIX = "/topic/presence.";
     public static final String USER_EVENTS = "/queue/events";
 
-    private static final Pattern CONVERSATION = Pattern.compile("^/topic/conversations\\.(\\d+)$");
-    private static final Pattern PRESENCE = Pattern.compile("^/topic/presence\\.(\\d+)$");
+    private static final String UUID_PATTERN = "([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})";
+    private static final Pattern CONVERSATION = Pattern.compile("^/topic/conversations\\." + UUID_PATTERN + "$");
+    private static final Pattern PRESENCE = Pattern.compile("^/topic/presence\\." + UUID_PATTERN + "$");
 
     private Destinations() {
     }
 
-    public static String conversation(Long id) {
+    public static String conversation(UUID id) {
         return CONVERSATION_PREFIX + id;
     }
 
-    public static String presence(Long userId) {
+    public static String presence(UUID userId) {
         return PRESENCE_PREFIX + userId;
     }
 
-    public static OptionalLong conversationId(String destination) {
+    public static Optional<UUID> conversationId(String destination) {
         return extract(CONVERSATION, destination);
     }
 
@@ -31,11 +33,11 @@ public final class Destinations {
         return extract(PRESENCE, destination).isPresent();
     }
 
-    private static OptionalLong extract(Pattern pattern, String destination) {
+    private static Optional<UUID> extract(Pattern pattern, String destination) {
         if (destination == null) {
-            return OptionalLong.empty();
+            return Optional.empty();
         }
         var m = pattern.matcher(destination);
-        return m.matches() ? OptionalLong.of(Long.parseLong(m.group(1))) : OptionalLong.empty();
+        return m.matches() ? Optional.of(UUID.fromString(m.group(1))) : Optional.empty();
     }
 }

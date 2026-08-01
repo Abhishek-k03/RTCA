@@ -1,6 +1,7 @@
 package com.rtca.conversation;
 
 import jakarta.persistence.LockModeType;
+import java.util.UUID;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -15,6 +16,12 @@ import java.util.Optional;
 public interface ConversationRepository extends JpaRepository<Conversation, Long> {
 
     Optional<Conversation> findByDirectKey(String directKey);
+
+    @Query("select c.id from Conversation c where c.publicId = :publicId")
+    Optional<Long> findIdByPublicId(@Param("publicId") UUID publicId);
+
+    @Query("select c.publicId from Conversation c where c.id = :id")
+    Optional<UUID> findPublicIdById(@Param("id") Long id);
 
     /** Bumps the version on commit, so concurrent group edits conflict. */
     @Lock(LockModeType.OPTIMISTIC_FORCE_INCREMENT)

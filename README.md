@@ -81,7 +81,7 @@ docker compose up -d postgres redis
 
 ## REST API
 
-All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` header.
+All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` header. User and conversation ids are UUIDs; message ids are numeric and only visible to members.
 
 | Method | Path | Description |
 |---|---|---|
@@ -192,6 +192,7 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
 ### Security
 - Stateless JWT auth, with BCrypt password hashes.
 - WebSocket sessions are authenticated on CONNECT, and every SUBSCRIBE to a conversation topic is checked for membership.
+- Users and conversations are exposed only by random UUIDs (`public_id`) in URLs, request/response bodies, WebSocket topics and events; the numeric ids stay internal. Ids can't be guessed or counted, and the JWT subject is the public id too.
 - Users who aren't members get `404` rather than `403`, so conversation ids don't leak.
 - Sending is rate-limited per user across all instances.
 
@@ -211,6 +212,7 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
   - STOMP messaging end to end
   - group removal, re-adding and membership events
   - clearing and deleting chats
+  - public ids: numeric or unknown ids are rejected, users can't be listed by counting
   - editing and deleting messages, including the time limit
 
 ## Possible improvements

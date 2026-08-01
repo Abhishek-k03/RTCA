@@ -1,6 +1,8 @@
 package com.rtca.presence;
 
+import com.rtca.common.ids.PublicIds;
 import jakarta.validation.constraints.Size;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -18,9 +20,10 @@ import java.util.Set;
 public class PresenceController {
 
     private final PresenceService presenceService;
+    private final PublicIds ids;
 
     @GetMapping
-    public Collection<PresenceStatus> get(@RequestParam @Size(min = 1, max = 200) Set<Long> userIds) {
-        return presenceService.statuses(userIds).values();
+    public Collection<PresenceStatus> get(@RequestParam @Size(min = 1, max = 200) Set<UUID> userIds) {
+        return presenceService.statuses(ids.userIds(userIds)).values();
     }
 }

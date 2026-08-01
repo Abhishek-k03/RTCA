@@ -43,7 +43,7 @@ public abstract class IntegrationTest {
     @LocalServerPort
     protected int port;
 
-    protected record TestUser(Long id, String username, String token) {
+    protected record TestUser(UUID id, String username, String token) {
     }
 
     protected TestUser newUser() {

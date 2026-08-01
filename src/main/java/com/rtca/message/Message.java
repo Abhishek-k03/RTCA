@@ -1,5 +1,6 @@
 package com.rtca.message;
 
+import com.rtca.conversation.Conversation;
 import com.rtca.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,6 +40,11 @@ public class Message {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "sender_id", updatable = false)
     private User sender;
+
+    // read-only view of conversation_id, used for the conversation's public id
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "conversation_id", insertable = false, updatable = false)
+    private Conversation conversation;
 
     @Column(nullable = false, columnDefinition = "text")
     private String content;

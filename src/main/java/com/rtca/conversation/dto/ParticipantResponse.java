@@ -2,9 +2,10 @@ package com.rtca.conversation.dto;
 
 import com.rtca.conversation.ConversationParticipant;
 import com.rtca.conversation.ParticipantRole;
+import java.util.UUID;
 
 public record ParticipantResponse(
-        Long userId,
+        UUID userId,
         String username,
         String displayName,
         ParticipantRole role,
@@ -13,7 +14,7 @@ public record ParticipantResponse(
 ) {
     public static ParticipantResponse from(ConversationParticipant p) {
         return new ParticipantResponse(
-                p.getUser().getId(),
+                p.getUser().getPublicId(),
                 p.getUser().getUsername(),
                 p.getUser().getDisplayName(),
                 p.getRole(),

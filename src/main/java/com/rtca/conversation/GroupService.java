@@ -4,7 +4,6 @@ import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.ForbiddenException;
 import com.rtca.common.exception.NotFoundException;
 import com.rtca.conversation.dto.ConversationResponse;
-import com.rtca.conversation.dto.CreateGroupRequest;
 import com.rtca.message.MessageRepository;
 import com.rtca.user.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -32,8 +31,8 @@ public class GroupService {
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
-    public ConversationResponse create(Long me, CreateGroupRequest request) {
-        Set<Long> memberIds = new HashSet<>(request.memberIds());
+    public ConversationResponse create(Long me, String name, Set<Long> requestedMembers) {
+        Set<Long> memberIds = new HashSet<>(requestedMembers);
         memberIds.remove(me);
         if (memberIds.isEmpty()) {
             throw new BadRequestException("A group needs at least one other member");
@@ -45,7 +44,7 @@ public class GroupService {
 
         Conversation group = conversationRepository.save(Conversation.builder()
                 .type(ConversationType.GROUP)
-                .name(request.name().trim())
+                .name(name.trim())
                 .createdBy(me)
                 .build());
 

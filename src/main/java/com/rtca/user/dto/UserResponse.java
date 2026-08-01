@@ -4,9 +4,10 @@ import com.rtca.user.Role;
 import com.rtca.user.User;
 
 import java.time.Instant;
+import java.util.UUID;
 
 public record UserResponse(
-        Long id,
+        UUID id,
         String username,
         String email,
         String displayName,
@@ -15,7 +16,7 @@ public record UserResponse(
 ) {
     public static UserResponse from(User user) {
         return new UserResponse(
-                user.getId(),
+                user.getPublicId(),
                 user.getUsername(),
                 user.getEmail(),
                 user.getDisplayName(),

@@ -1,12 +1,14 @@
 package com.rtca.message;
 
 import com.rtca.common.exception.NotFoundException;
+import com.rtca.common.ids.PublicIds;
 import com.rtca.conversation.ConversationParticipant;
 import com.rtca.conversation.MembershipService;
 import com.rtca.conversation.ParticipantRepository;
 import com.rtca.websocket.ChatEvent;
 import com.rtca.websocket.ChatEvent.EventType;
 import com.rtca.websocket.ChatEventPublisher;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -21,6 +23,7 @@ public class ReceiptService {
     private final MessageRepository messageRepository;
     private final MembershipService membershipService;
     private final ChatEventPublisher publisher;
+    private final PublicIds ids;
 
     /** Marks everything up to messageId as read (which implies delivered). */
     @Transactional
@@ -28,7 +31,7 @@ public class ReceiptService {
         ConversationParticipant p = membershipService.requireAccess(conversationId, userId);
         long id = visibleId(p, conversationId, messageId);
         if (id > 0 && participantRepository.advanceRead(conversationId, userId, id) > 0 && p.isActive()) {
-            publishAfterCommit(conversationId, EventType.READ, new Receipt(conversationId, userId, id));
+            publishAfterCommit(conversationId, EventType.READ, receipt(conversationId, userId, id));
         }
     }
 
@@ -37,7 +40,7 @@ public class ReceiptService {
         ConversationParticipant p = membershipService.requireAccess(conversationId, userId);
         long id = visibleId(p, conversationId, messageId);
         if (id > 0 && participantRepository.advanceDelivered(conversationId, userId, id) > 0 && p.isActive()) {
-            publishAfterCommit(conversationId, EventType.DELIVERED, new Receipt(conversationId, userId, id));
+            publishAfterCommit(conversationId, EventType.DELIVERED, receipt(conversationId, userId, id));
         }
     }
 
@@ -58,6 +61,10 @@ public class ReceiptService {
         });
     }
 
-    public record Receipt(Long conversationId, Long userId, Long messageId) {
+    private Receipt receipt(Long conversationId, Long userId, long messageId) {
+        return new Receipt(ids.conversation(conversationId), ids.user(userId), messageId);
+    }
+
+    public record Receipt(UUID conversationId, UUID userId, Long messageId) {
     }
 }

@@ -23,7 +23,7 @@ class ClearAndDeleteChatIntegrationTest extends IntegrationTest {
     void clearingHidesEarlierMessagesOnlyForMe() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         send(alice, convId, "old");
 
         assertThat(call(POST, "/api/conversations/" + convId + "/clear", bob, null, Void.class).getStatusCode())
@@ -41,7 +41,7 @@ class ClearAndDeleteChatIntegrationTest extends IntegrationTest {
     void deletingDirectChatHidesItUntilTheNextMessage() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         send(alice, convId, "before delete");
 
         assertThat(call(DELETE, "/api/conversations/" + convId, bob, null, Void.class).getStatusCode())
@@ -59,7 +59,7 @@ class ClearAndDeleteChatIntegrationTest extends IntegrationTest {
     void listPreviewShowsNewestMessageTheViewerCanSee() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         send(alice, convId, "first");
         Long second = send(alice, convId, "second");
         assertThat(entry(bob, convId).orElseThrow().lastMessage().content()).isEqualTo("second");
@@ -75,23 +75,23 @@ class ClearAndDeleteChatIntegrationTest extends IntegrationTest {
         assertThat(entry(bob, convId).orElseThrow().lastMessage().content()).isEqualTo("third");
     }
 
-    private Long direct(TestUser a, TestUser b) {
+    private UUID direct(TestUser a, TestUser b) {
         return call(POST, "/api/conversations/direct", a, Map.of("userId", b.id()), ConversationResponse.class)
                 .getBody().id();
     }
 
-    private Long send(TestUser as, Long convId, String content) {
+    private Long send(TestUser as, UUID convId, String content) {
         return call(POST, "/api/conversations/" + convId + "/messages", as,
                 Map.of("clientMessageId", UUID.randomUUID().toString(), "content", content), MessageResponse.class)
                 .getBody().id();
     }
 
-    private List<String> contents(TestUser as, Long convId) {
+    private List<String> contents(TestUser as, UUID convId) {
         return call(GET, "/api/conversations/" + convId + "/messages", as, null, MessagePage.class)
                 .getBody().items().stream().map(MessageResponse::content).toList();
     }
 
-    private Optional<ConversationResponse> entry(TestUser as, Long convId) {
+    private Optional<ConversationResponse> entry(TestUser as, UUID convId) {
         return call(GET, "/api/conversations", as, null, ConversationPage.class).getBody().content().stream()
                 .filter(c -> c.id().equals(convId))
                 .findFirst();

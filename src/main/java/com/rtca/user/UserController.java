@@ -2,10 +2,12 @@ package com.rtca.user;
 
 import com.rtca.auth.AuthUser;
 import com.rtca.common.dto.PageResponse;
+import com.rtca.common.ids.PublicIds;
 import com.rtca.user.dto.UpdateProfileRequest;
 import com.rtca.user.dto.UserResponse;
 import com.rtca.user.dto.UserSummary;
 import jakarta.validation.Valid;
+import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
 
     private final UserService userService;
+    private final PublicIds ids;
 
     @GetMapping("/me")
     public UserResponse me(@AuthenticationPrincipal AuthUser me) {
@@ -37,8 +40,8 @@ public class UserController {
     }
 
     @GetMapping("/{id}")
-    public UserSummary get(@PathVariable Long id) {
-        return userService.getSummary(id);
+    public UserSummary get(@PathVariable UUID id) {
+        return userService.getSummary(ids.userId(id));
     }
 
     @GetMapping("/search")

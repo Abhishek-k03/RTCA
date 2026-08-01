@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import java.util.UUID;
 
 @WebMvcTest(AuthController.class)
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class})
@@ -35,7 +36,7 @@ class AuthControllerTest {
     @MockitoBean JwtService jwtService;
     @MockitoBean UserDetailsService userDetailsService;
 
-    private final UserResponse alice = new UserResponse(1L, "alice", "a@x.com", "alice", Role.USER, Instant.now());
+    private final UserResponse alice = new UserResponse(UUID.randomUUID(), "alice", "a@x.com", "alice", Role.USER, Instant.now());
 
     @Test
     void registerReturnsCreated() throws Exception {

@@ -55,7 +55,7 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         TestUser alice = newUser();
         TestUser bob = newUser();
         TestUser carol = newUser();
-        Long groupId = group(alice, bob, carol);
+        UUID groupId = group(alice, bob, carol);
 
         Long before = send(alice, groupId, "before").getBody().id();
         remove(alice, groupId, bob);
@@ -78,7 +78,7 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         TestUser alice = newUser();
         TestUser bob = newUser();
         TestUser carol = newUser();
-        Long groupId = group(alice, bob, carol);
+        UUID groupId = group(alice, bob, carol);
 
         StompSession bobSession = connect(bob.token());
         BlockingQueue<JsonNode> bobTopic = subscribe(bobSession, "/topic/conversations." + groupId);
@@ -89,7 +89,7 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
 
         remove(alice, groupId, bob);
         JsonNode removed = nextOfType(bobEvents, "REMOVED");
-        assertThat(removed.at("/payload/conversationId").asLong()).isEqualTo(groupId);
+        assertThat(removed.at("/payload/conversationId").asText()).isEqualTo(groupId.toString());
 
         send(alice, groupId, "bob should not see this");
         assertThat(nextOfType(carolTopic, "MESSAGE").at("/payload/content").asText())
@@ -101,7 +101,7 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
     void onlyFormerMembersCanDeleteConversation() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long groupId = group(alice, bob);
+        UUID groupId = group(alice, bob);
 
         assertThat(call(DELETE, "/api/conversations/" + groupId, bob, null, Map.class).getStatusCode())
                 .isEqualTo(HttpStatus.BAD_REQUEST);
@@ -121,7 +121,7 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         TestUser alice = newUser();
         TestUser bob = newUser();
         TestUser carol = newUser();
-        Long groupId = group(alice, bob, carol);
+        UUID groupId = group(alice, bob, carol);
 
         send(alice, groupId, "one");
         remove(alice, groupId, bob);
@@ -141,8 +141,8 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         TestUser alice = newUser();
         TestUser bob = newUser();
         TestUser carol = newUser();
-        Long groupId = group(alice, bob, carol);
-        Long directId = call(POST, "/api/conversations/direct", carol, Map.of("userId", bob.id()),
+        UUID groupId = group(alice, bob, carol);
+        UUID directId = call(POST, "/api/conversations/direct", carol, Map.of("userId", bob.id()),
                 ConversationResponse.class).getBody().id();
 
         remove(alice, groupId, bob);
@@ -161,7 +161,7 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         TestUser alice = newUser();
         TestUser bob = newUser();
         TestUser carol = newUser();
-        Long groupId = group(alice, bob, carol);
+        UUID groupId = group(alice, bob, carol);
         remove(alice, groupId, bob);
 
         StompSession bobSession = connect(bob.token());
@@ -170,7 +170,7 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
 
         call(POST, "/api/conversations/groups/" + groupId + "/members", alice,
                 Map.of("userIds", List.of(bob.id())), ConversationResponse.class);
-        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asLong()).isEqualTo(groupId);
+        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asText()).isEqualTo(groupId.toString());
     }
 
     @Test
@@ -181,9 +181,9 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         BlockingQueue<JsonNode> bobEvents = subscribe(connect(bob.token()), "/user/queue/events");
         Thread.sleep(300);
 
-        Long groupId = group(alice, bob);
+        UUID groupId = group(alice, bob);
 
-        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asLong()).isEqualTo(groupId);
+        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asText()).isEqualTo(groupId.toString());
         assertThat(aliceEvents.poll(1, TimeUnit.SECONDS)).isNull();
     }
 
@@ -194,14 +194,14 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         BlockingQueue<JsonNode> bobEvents = subscribe(connect(bob.token()), "/user/queue/events");
         Thread.sleep(300);
 
-        Long directId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
+        UUID directId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
                 ConversationResponse.class).getBody().id();
         assertThat(bobEvents.poll(1, TimeUnit.SECONDS)).isNull();
         assertThat(listIds(bob)).doesNotContain(directId);
         assertThat(listIds(alice)).doesNotContain(directId);
 
         send(alice, directId, "hi bob");
-        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asLong()).isEqualTo(directId);
+        assertThat(nextOfType(bobEvents, "ADDED").at("/payload/conversationId").asText()).isEqualTo(directId.toString());
         assertThat(listIds(alice)).contains(directId);
         List<ConversationResponse> bobList = list(bob);
         assertThat(bobList).extracting(ConversationResponse::id).contains(directId);
@@ -216,10 +216,10 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
     void openingDirectChatFromEitherSideReusesItAndFirstMessageShowsIt() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long directId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
+        UUID directId = call(POST, "/api/conversations/direct", alice, Map.of("userId", bob.id()),
                 ConversationResponse.class).getBody().id();
 
-        Long bobsId = call(POST, "/api/conversations/direct", bob, Map.of("userId", alice.id()),
+        UUID bobsId = call(POST, "/api/conversations/direct", bob, Map.of("userId", alice.id()),
                 ConversationResponse.class).getBody().id();
         assertThat(bobsId).isEqualTo(directId);
         assertThat(listIds(bob)).doesNotContain(directId);
@@ -233,31 +233,31 @@ class GroupRemovalIntegrationTest extends IntegrationTest {
         return call(GET, "/api/conversations", as, null, ConversationPage.class).getBody().content();
     }
 
-    private List<Long> listIds(TestUser as) {
+    private List<UUID> listIds(TestUser as) {
         return list(as).stream().map(ConversationResponse::id).toList();
     }
 
     private record ConversationPage(List<ConversationResponse> content) {
     }
 
-    private Long group(TestUser owner, TestUser... members) {
-        List<Long> ids = Arrays.stream(members).map(TestUser::id).toList();
+    private UUID group(TestUser owner, TestUser... members) {
+        List<UUID> ids = Arrays.stream(members).map(TestUser::id).toList();
         return call(POST, "/api/conversations/groups", owner, Map.of("name", "g", "memberIds", ids),
                 ConversationResponse.class).getBody().id();
     }
 
-    private void remove(TestUser as, Long groupId, TestUser target) {
+    private void remove(TestUser as, UUID groupId, TestUser target) {
         assertThat(call(DELETE, "/api/conversations/groups/" + groupId + "/members/" + target.id(), as, null,
                 Void.class).getStatusCode().is2xxSuccessful()).isTrue();
     }
 
-    private ResponseEntity<MessageResponse> send(TestUser as, Long convId, String content) {
+    private ResponseEntity<MessageResponse> send(TestUser as, UUID convId, String content) {
         return call(POST, "/api/conversations/" + convId + "/messages", as,
                 Map.of("clientMessageId", UUID.randomUUID().toString(), "content", content),
                 MessageResponse.class);
     }
 
-    private MessagePage history(TestUser as, Long convId) {
+    private MessagePage history(TestUser as, UUID convId) {
         return call(GET, "/api/conversations/" + convId + "/messages", as, null, MessagePage.class).getBody();
     }
 

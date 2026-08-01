@@ -28,7 +28,7 @@ class MessageEditDeleteIntegrationTest extends IntegrationTest {
     void senderCanEditOwnMessage() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         Long msgId = send(alice, convId, "helo");
 
         var edited = call(PATCH, url(convId, msgId), alice, Map.of("content", "hello"), MessageResponse.class);
@@ -47,7 +47,7 @@ class MessageEditDeleteIntegrationTest extends IntegrationTest {
     void deleteForEveryoneWipesContentForAllMembers() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         Long msgId = send(alice, convId, "oops");
 
         assertThat(call(POST, "/api/conversations/" + convId + "/clear", bob, null, Void.class).getStatusCode())
@@ -73,7 +73,7 @@ class MessageEditDeleteIntegrationTest extends IntegrationTest {
     void deleteForMeHidesOnlyForMe() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         Long msgId = send(alice, convId, "hi");
 
         assertThat(call(DELETE, url(convId, msgId), bob, null, Void.class).getStatusCode())
@@ -86,7 +86,7 @@ class MessageEditDeleteIntegrationTest extends IntegrationTest {
     void editAndDeleteForEveryoneExpireAfterWindow() {
         TestUser alice = newUser();
         TestUser bob = newUser();
-        Long convId = direct(alice, bob);
+        UUID convId = direct(alice, bob);
         Long msgId = send(alice, convId, "old");
         jdbc.update("update messages set created_at = now() - interval '16 minutes' where id = ?", msgId);
 
@@ -99,22 +99,22 @@ class MessageEditDeleteIntegrationTest extends IntegrationTest {
                 .isEqualTo(HttpStatus.NO_CONTENT);
     }
 
-    private String url(Long convId, Long msgId) {
+    private String url(UUID convId, Long msgId) {
         return "/api/conversations/" + convId + "/messages/" + msgId;
     }
 
-    private Long direct(TestUser a, TestUser b) {
+    private UUID direct(TestUser a, TestUser b) {
         return call(POST, "/api/conversations/direct", a, Map.of("userId", b.id()), ConversationResponse.class)
                 .getBody().id();
     }
 
-    private Long send(TestUser as, Long convId, String content) {
+    private Long send(TestUser as, UUID convId, String content) {
         return call(POST, "/api/conversations/" + convId + "/messages", as,
                 Map.of("clientMessageId", UUID.randomUUID().toString(), "content", content), MessageResponse.class)
                 .getBody().id();
     }
 
-    private List<MessageResponse> history(TestUser as, Long convId) {
+    private List<MessageResponse> history(TestUser as, UUID convId) {
         return call(GET, "/api/conversations/" + convId + "/messages", as, null, MessagePage.class).getBody().items();
     }
 }
