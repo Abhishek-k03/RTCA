@@ -19,3 +19,6 @@ target/
 ### Env ###
 .env
 *.log
+
+### Uploads ###
+data/

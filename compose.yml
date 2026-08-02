@@ -16,6 +16,8 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+    volumes:
+      - files-data:/data/files
     depends_on:
       postgres:
         condition: service_healthy
@@ -75,3 +77,4 @@ services:
 volumes:
   pg-data:
   redis-data:
+  files-data:

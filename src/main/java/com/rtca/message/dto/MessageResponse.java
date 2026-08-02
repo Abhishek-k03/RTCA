@@ -1,5 +1,7 @@
 package com.rtca.message.dto;
 
+import com.rtca.file.FileUrls;
+import com.rtca.file.StoredFile;
 import com.rtca.message.Message;
 import com.rtca.message.MessageType;
 
@@ -16,8 +18,12 @@ public record MessageResponse(
         String clientMessageId,
         Instant createdAt,
         Instant editedAt,
-        boolean deleted
+        boolean deleted,
+        Image image
 ) {
+    public record Image(String url, Integer width, Integer height) {
+    }
+
     public static MessageResponse from(Message m) {
         return new MessageResponse(
                 m.getId(),
@@ -29,7 +35,13 @@ public record MessageResponse(
                 m.getClientMessageId(),
                 m.getCreatedAt(),
                 m.getEditedAt(),
-                m.isDeleted()
+                m.isDeleted(),
+                image(m)
         );
+    }
+
+    private static Image image(Message m) {
+        StoredFile f = m.getFile();
+        return f == null || m.isDeleted() ? null : new Image(FileUrls.of(f.getId()), f.getWidth(), f.getHeight());
     }
 }

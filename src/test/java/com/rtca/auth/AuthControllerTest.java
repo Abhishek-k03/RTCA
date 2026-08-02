@@ -36,7 +36,7 @@ class AuthControllerTest {
     @MockitoBean JwtService jwtService;
     @MockitoBean UserDetailsService userDetailsService;
 
-    private final UserResponse alice = new UserResponse(UUID.randomUUID(), "alice", "a@x.com", "alice", Role.USER, Instant.now());
+    private final UserResponse alice = new UserResponse(UUID.randomUUID(), "alice", "a@x.com", "alice", null, null, Role.USER, Instant.now());
 
     @Test
     void registerReturnsCreated() throws Exception {

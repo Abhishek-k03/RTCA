@@ -9,23 +9,24 @@ import org.springframework.data.repository.query.Param;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public interface MessageRepository extends JpaRepository<Message, Long> {
 
     boolean existsByIdAndConversationId(Long id, Long conversationId);
 
-    @Query("select m from Message m join fetch m.sender where m.id = :id")
+    @Query("select m from Message m join fetch m.sender left join fetch m.file where m.id = :id")
     Optional<Message> findWithSender(@Param("id") Long id);
 
     @Query("""
-            select m from Message m join fetch m.sender
+            select m from Message m join fetch m.sender left join fetch m.file
             where m.sender.id = :senderId and m.clientMessageId = :clientMessageId
             """)
     Optional<Message> findByClientId(@Param("senderId") Long senderId,
                                      @Param("clientMessageId") String clientMessageId);
 
     @Query("""
-            select m from Message m join fetch m.sender
+            select m from Message m join fetch m.sender left join fetch m.file
             where m.conversationId = :conversationId and m.id > :minId and m.id <= :maxId
               and not exists (select 1 from MessageHide h where h.id.messageId = m.id and h.id.userId = :userId)
             order by m.id desc
@@ -34,7 +35,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                              @Param("minId") Long minId, @Param("maxId") Long maxId, Pageable pageable);
 
     @Query("""
-            select m from Message m join fetch m.sender
+            select m from Message m join fetch m.sender left join fetch m.file
             where m.conversationId = :conversationId and m.id < :before and m.id > :minId and m.id <= :maxId
               and not exists (select 1 from MessageHide h where h.id.messageId = m.id and h.id.userId = :userId)
             order by m.id desc
@@ -44,7 +45,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                              Pageable pageable);
 
     @Query("""
-            select m from Message m join fetch m.sender
+            select m from Message m join fetch m.sender left join fetch m.file
             where m.conversationId = :conversationId and m.id > :after and m.id > :minId and m.id <= :maxId
               and not exists (select 1 from MessageHide h where h.id.messageId = m.id and h.id.userId = :userId)
             order by m.id asc
@@ -52,6 +53,14 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Message> findAfter(@Param("conversationId") Long conversationId, @Param("userId") Long userId,
                             @Param("after") Long after, @Param("minId") Long minId, @Param("maxId") Long maxId,
                             Pageable pageable);
+
+    Optional<Message> findByFileId(UUID fileId);
+
+    @Query("""
+            select count(h) > 0 from MessageHide h
+            where h.id.userId = :userId and h.id.messageId = :messageId
+            """)
+    boolean isHidden(@Param("userId") Long userId, @Param("messageId") Long messageId);
 
     @Modifying
     @Query(nativeQuery = true, value = """
@@ -111,4 +120,17 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                                   @Param("senderId") Long senderId,
                                   @Param("content") String content,
                                   @Param("clientMessageId") String clientMessageId);
+
+    /** Same as insertIfAbsent, for an image with an optional caption. */
+    @Query(nativeQuery = true, value = """
+            insert into messages (conversation_id, sender_id, content, type, client_message_id, file_id, created_at)
+            values (:conversationId, :senderId, :content, 'IMAGE', :clientMessageId, :fileId, now())
+            on conflict (sender_id, client_message_id) do nothing
+            returning id
+            """)
+    Optional<Long> insertImageIfAbsent(@Param("conversationId") Long conversationId,
+                                       @Param("senderId") Long senderId,
+                                       @Param("content") String content,
+                                       @Param("clientMessageId") String clientMessageId,
+                                       @Param("fileId") UUID fileId);
 }

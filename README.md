@@ -16,6 +16,8 @@ A backend for a real-time chat application built with Spring Boot. It supports o
 - New direct chats stay out of both lists until the first message
 - Clear chat and delete chat, per user
 - Edit messages and delete them for yourself or for everyone (within 15 minutes)
+- Profiles with display name, bio and profile picture
+- Image messages with an optional caption, only visible to members who can see that message
 - Redis caching, per-user rate limiting, and pub/sub relay for running multiple instances
 - Centralized validation and error handling for both REST and WebSocket
 - Docker Compose setup with health checks
@@ -40,6 +42,7 @@ Code is organized by feature, and each feature package is layered:
 | `user` | profiles, search, admin user management |
 | `conversation` | direct and group chats, membership, roles |
 | `message` | sending, history, receipts |
+| `file` | uploaded images: storage, type checks, access rules |
 | `presence` | online status, typing indicators |
 | `websocket` | STOMP config, auth/subscription interceptors, event publishing, redis relay |
 | `common` | config, exceptions, shared DTOs, rate limiter |
@@ -78,6 +81,7 @@ docker compose up -d postgres redis
 | `MSG_RATE_LIMIT` / `MSG_RATE_WINDOW` | `20` / `10s` | messages per user per window |
 | `MSG_EDIT_WINDOW` / `MSG_DELETE_WINDOW` | `15m` / `15m` | how long a sender can edit or delete for everyone |
 | `RELAY_ENABLED` | `true` | Redis pub/sub fan-out |
+| `FILES_DIR` | `./data/files` | where uploaded images are stored. `/data/files` (a volume) in Docker |
 
 ## REST API
 
@@ -87,7 +91,8 @@ All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` head
 |---|---|---|
 | POST | `/api/auth/register` | create account |
 | POST | `/api/auth/login` | `{login, password}` returns access token |
-| GET / PATCH | `/api/users/me` | own profile |
+| GET / PATCH | `/api/users/me` | own profile. PATCH `{displayName, bio}`, a blank bio clears it |
+| PUT / DELETE | `/api/users/me/avatar` | set (multipart `file`, up to 2 MB) or remove your profile picture |
 | GET | `/api/users/{id}` | public profile |
 | GET | `/api/users/search?q=` | search by username/display name |
 | GET | `/api/conversations` | my conversations with unread counts, most recent first |
@@ -102,10 +107,12 @@ All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` head
 | PATCH | `/api/conversations/groups/{id}/members/{userId}/role` | change role (owner) |
 | GET | `/api/conversations/{id}/messages?before=&after=&limit=` | history |
 | POST | `/api/conversations/{id}/messages` | `{clientMessageId, content}` send |
+| POST | `/api/conversations/{id}/messages/images` | multipart `file` (up to 10 MB) plus `clientMessageId`, `caption`, `width`, `height`. Send an image |
 | POST | `/api/conversations/{id}/messages/read` | `{messageId}` mark read |
 | PATCH | `/api/conversations/{id}/messages/{messageId}` | `{content}` edit your own message |
 | DELETE | `/api/conversations/{id}/messages/{messageId}?scope=me` | hide a message for yourself (no time limit) |
 | DELETE | `/api/conversations/{id}/messages/{messageId}?scope=everyone` | delete your own message for all members |
+| GET | `/api/files/{id}` | an uploaded image (profile picture or chat image) |
 | GET | `/api/presence?userIds=1,2` | presence status |
 | GET / PATCH | `/api/admin/users` | admin only |
 
@@ -145,7 +152,7 @@ Every event uses the envelope `{"type": "...", "payload": {...}}`.
 - `EDITED {message}`: the full updated message, with `editedAt` set.
 - `DELETED {conversationId, messageId}`: a message was deleted for everyone.
 
-Conversation responses include `lastMessage` (the newest message you can see, for list previews) and `removedAt` when you are no longer a member. Messages include `editedAt`, and `deleted: true` with `content: null` once deleted for everyone.
+Conversation responses include `lastMessage` (the newest message you can see, for list previews, with its `type`) and `removedAt` when you are no longer a member. Messages include `editedAt`, and `deleted: true` with `content: null` once deleted for everyone. Image messages have `type: IMAGE`, the caption in `content`, and `image {url, width, height}`. Users and participants include `avatarUrl`.
 
 ## Design notes
 
@@ -166,6 +173,7 @@ This holds under concurrent retries because Postgres decides the winner atomical
 - **Removal keeps the row.** Removing a member (or leaving) sets `removed_at` and remembers the last message they may see. They keep read access to that history, cannot send or subscribe, and can delete the chat from their list.
 - **Live cutoff.** The subscribe check only runs on SUBSCRIBE, so after removal the server drops the user's existing subscriptions to that topic on every instance (through the Redis relay) and sends them `REMOVED`.
 - **Hidden direct chats.** Opening a direct chat creates it hidden for both users. The first message reveals it and sends `ADDED` to both.
+- **Images.** Sending an image is one multipart request that stores the file and creates the message, with the same `clientMessageId` idempotency as text; a retry doesn't store the file twice. Only text messages can be edited. Deleting an image for everyone also deletes the file.
 - **Edit and delete.** Only the sender can edit or delete for everyone, within `MSG_EDIT_WINDOW` / `MSG_DELETE_WINDOW`. Deleting for everyone wipes the content but keeps the row, so ids, cursors and receipts stay valid. Deleting for yourself adds a row to `message_hides`, which history and unread counts skip for that user.
 - **Per-user views.** Clearing a chat stores a per-member `cleared_up_to_message_id`, so history and unread counts skip older messages for that user only. Deleting a direct chat clears and hides it, and the next message brings it back.
 
@@ -194,6 +202,10 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
 - WebSocket sessions are authenticated on CONNECT, and every SUBSCRIBE to a conversation topic is checked for membership.
 - Users and conversations are exposed only by random UUIDs (`public_id`) in URLs, request/response bodies, WebSocket topics and events; the numeric ids stay internal. Ids can't be guessed or counted, and the JWT subject is the public id too.
 - Users who aren't members get `404` rather than `403`, so conversation ids don't leak.
+- Uploaded files:
+  - The type is checked from the file's first bytes (JPEG, PNG, GIF, WebP only), never from what the client sends, so SVG and HTML can't be uploaded.
+  - Files are served only to signed-in users. A chat image follows the same rules as the message: removed members keep the images from before they left, and clearing a chat or deleting a message for yourself hides its image too.
+  - Anything you can't see is a `404`, and file ids are random UUIDs.
 - Sending is rate-limited per user across all instances.
 
 ## Testing
@@ -214,10 +226,12 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
   - clearing and deleting chats
   - public ids: numeric or unknown ids are rejected, users can't be listed by counting
   - editing and deleting messages, including the time limit
+  - profiles, profile pictures and image messages: type checks, size limits, access for members, removed members and non-members
 
 ## Possible improvements
 
 - Refresh tokens and token revocation
 - An external broker relay (RabbitMQ/ActiveMQ STOMP) instead of the simple broker plus Redis relay
 - An outbox table for guaranteed event delivery when Redis is down for a long time
-- Attachments and push notifications
+- S3-compatible storage behind `FileStorage` for running several instances without a shared volume
+- Thumbnails, other attachment types and push notifications

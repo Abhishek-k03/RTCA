@@ -23,7 +23,10 @@ import java.util.UUID;
  * Containers are shared by all test classes so the spring context can be cached.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@TestPropertySource(properties = "app.rate-limit.messages.limit=1000")
+@TestPropertySource(properties = {
+        "app.rate-limit.messages.limit=1000",
+        "app.files.dir=${java.io.tmpdir}/rtca-test-files"
+})
 public abstract class IntegrationTest {
 
     @ServiceConnection

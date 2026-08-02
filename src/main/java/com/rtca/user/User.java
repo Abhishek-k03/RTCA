@@ -40,6 +40,12 @@ public class User extends BaseEntity {
     @Column(name = "display_name", length = 64)
     private String displayName;
 
+    @Column(length = 200)
+    private String bio;
+
+    @Column(name = "avatar_id")
+    private UUID avatarId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default

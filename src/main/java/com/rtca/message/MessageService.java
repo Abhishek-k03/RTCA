@@ -10,8 +10,12 @@ import com.rtca.conversation.ConversationRepository;
 import com.rtca.conversation.MemberAddedEvent;
 import com.rtca.conversation.MembershipService;
 import com.rtca.conversation.ParticipantRepository;
+import com.rtca.file.FilePurpose;
+import com.rtca.file.FileService;
+import com.rtca.file.StoredFile;
 import com.rtca.message.dto.MessagePage;
 import com.rtca.message.dto.MessageResponse;
+import com.rtca.message.dto.SendImageRequest;
 import com.rtca.message.dto.SendMessageRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,10 +23,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 @Service
@@ -38,6 +44,7 @@ public class MessageService {
     private final MessageProperties properties;
     private final ApplicationEventPublisher eventPublisher;
     private final RateLimiter rateLimiter;
+    private final FileService fileService;
 
     /**
      * Idempotent on (sender, clientMessageId). A retried send returns the
@@ -57,16 +64,51 @@ public class MessageService {
                 conversationId, senderId, content, request.clientMessageId());
 
         if (insertedId.isEmpty()) {
-            Message existing = messageRepository.findByClientId(senderId, request.clientMessageId())
-                    .orElseThrow(() -> new IllegalStateException("Duplicate message vanished"));
-            if (!existing.getConversationId().equals(conversationId)) {
-                throw new ConflictException("clientMessageId already used in another conversation");
-            }
-            log.debug("Duplicate send {} from user {}", request.clientMessageId(), senderId);
-            return new SendResult(MessageResponse.from(existing), false);
+            return duplicate(findDuplicate(senderId, request.clientMessageId()), conversationId);
+        }
+        return created(conversationId, insertedId.get());
+    }
+
+    /** Same idempotency as send. The caption may be empty. */
+    @Transactional
+    public SendResult sendImage(Long senderId, Long conversationId, SendImageRequest request, MultipartFile upload) {
+        rateLimiter.checkMessageSend(senderId);
+        membershipService.requireMember(conversationId, senderId);
+
+        // a retry must not store the image a second time
+        Optional<Message> existing = messageRepository.findByClientId(senderId, request.clientMessageId());
+        if (existing.isPresent()) {
+            return duplicate(existing.get(), conversationId);
         }
 
-        Message message = messageRepository.findWithSender(insertedId.get()).orElseThrow();
+        StoredFile file = fileService.store(senderId, FilePurpose.MESSAGE, upload, request.width(), request.height());
+        String caption = request.caption() == null ? "" : request.caption().strip();
+        var insertedId = messageRepository.insertImageIfAbsent(
+                conversationId, senderId, caption, request.clientMessageId(), file.getId());
+
+        if (insertedId.isEmpty()) {
+            // a concurrent retry got there first
+            fileService.deleteAfterCommit(file.getId());
+            return duplicate(findDuplicate(senderId, request.clientMessageId()), conversationId);
+        }
+        return created(conversationId, insertedId.get());
+    }
+
+    private Message findDuplicate(Long senderId, String clientMessageId) {
+        return messageRepository.findByClientId(senderId, clientMessageId)
+                .orElseThrow(() -> new IllegalStateException("Duplicate message vanished"));
+    }
+
+    private SendResult duplicate(Message existing, Long conversationId) {
+        if (!existing.getConversationId().equals(conversationId)) {
+            throw new ConflictException("clientMessageId already used in another conversation");
+        }
+        log.debug("Duplicate send {} from user {}", existing.getClientMessageId(), existing.getSender().getId());
+        return new SendResult(MessageResponse.from(existing), false);
+    }
+
+    private SendResult created(Long conversationId, Long messageId) {
+        Message message = messageRepository.findWithSender(messageId).orElseThrow();
         conversationRepository.touchLastMessageAt(conversationId, message.getCreatedAt());
         revealToHiddenParticipants(conversationId);
 
@@ -79,6 +121,9 @@ public class MessageService {
     @Transactional
     public MessageResponse edit(Long userId, Long conversationId, Long messageId, String content) {
         Message message = ownMessage(userId, conversationId, messageId, properties.editWindow(), "edit");
+        if (message.getType() != MessageType.TEXT) {
+            throw new BadRequestException("Only text messages can be edited");
+        }
         String newContent = content.strip();
         if (newContent.isEmpty()) {
             throw new BadRequestException("Message must not be blank");
@@ -91,7 +136,12 @@ public class MessageService {
 
     @Transactional
     public void deleteForEveryone(Long userId, Long conversationId, Long messageId) {
-        ownMessage(userId, conversationId, messageId, properties.deleteWindow(), "delete").delete();
+        Message message = ownMessage(userId, conversationId, messageId, properties.deleteWindow(), "delete");
+        StoredFile file = message.getFile();
+        message.delete();
+        if (file != null) {
+            fileService.deleteAfterCommit(file.getId());
+        }
         eventPublisher.publishEvent(new MessageDeletedEvent(conversationId, messageId));
     }
 

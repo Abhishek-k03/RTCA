@@ -1,5 +1,6 @@
 package com.rtca.user.dto;
 
+import com.rtca.file.FileUrls;
 import com.rtca.user.Role;
 import com.rtca.user.User;
 
@@ -11,6 +12,8 @@ public record UserResponse(
         String username,
         String email,
         String displayName,
+        String bio,
+        String avatarUrl,
         Role role,
         Instant createdAt
 ) {
@@ -20,6 +23,8 @@ public record UserResponse(
                 user.getUsername(),
                 user.getEmail(),
                 user.getDisplayName(),
+                user.getBio(),
+                FileUrls.of(user.getAvatarId()),
                 user.getRole(),
                 user.getCreatedAt()
         );

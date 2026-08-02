@@ -1,6 +1,7 @@
 package com.rtca.message;
 
 import com.rtca.conversation.Conversation;
+import com.rtca.file.StoredFile;
 import com.rtca.user.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -46,8 +47,13 @@ public class Message {
     @JoinColumn(name = "conversation_id", insertable = false, updatable = false)
     private Conversation conversation;
 
+    /** Text, or the caption of an image. */
     @Column(nullable = false, columnDefinition = "text")
     private String content;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "file_id")
+    private StoredFile file;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
@@ -80,6 +86,7 @@ public class Message {
     // content is wiped, the row stays so history and receipts keep their ids
     public void delete() {
         content = "";
+        file = null;
         deletedAt = Instant.now();
     }
 }

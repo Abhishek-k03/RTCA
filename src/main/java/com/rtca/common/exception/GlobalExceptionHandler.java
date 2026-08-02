@@ -13,6 +13,9 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.MultipartException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -45,6 +48,16 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class})
     public ResponseEntity<ApiError> handleBadInput(Exception ex, HttpServletRequest req) {
         return build(HttpStatus.BAD_REQUEST, "Malformed request", req);
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ApiError> handleTooLarge(MaxUploadSizeExceededException ex, HttpServletRequest req) {
+        return build(HttpStatus.PAYLOAD_TOO_LARGE, "File is too large", req);
+    }
+
+    @ExceptionHandler({MultipartException.class, MissingServletRequestPartException.class})
+    public ResponseEntity<ApiError> handleBadUpload(Exception ex, HttpServletRequest req) {
+        return build(HttpStatus.BAD_REQUEST, "Expected a multipart upload with a 'file' part", req);
     }
 
     // unique constraint races that slip past service checks

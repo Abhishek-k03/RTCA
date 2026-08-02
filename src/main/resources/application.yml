@@ -33,6 +33,11 @@ spring:
   cache:
     type: redis
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 11MB
+
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -75,6 +80,10 @@ app:
     allowed-origins: ${WS_ALLOWED_ORIGINS:*}
   relay:
     enabled: ${RELAY_ENABLED:true}
+  files:
+    dir: ${FILES_DIR:./data/files}
+    max-image-size: 10MB
+    max-avatar-size: 2MB
   messages:
     edit-window: ${MSG_EDIT_WINDOW:15m}
     delete-window: ${MSG_DELETE_WINDOW:15m}
