@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthContext'
 import { useStomp } from '../ws/StompContext'
 import { useTheme } from '../theme'
 import { displayName } from '../lib'
+import Avatar from './Avatar'
 import Brand from './Brand'
 import ConversationList from './ConversationList'
 import NewGroupDialog from './NewGroupDialog'
@@ -85,7 +86,8 @@ export default function Sidebar({ conversations, activeId, recents, onOpenChat, 
       </nav>
 
       <footer className="hairline flex items-center gap-1 border-t px-4 py-3">
-        <Link to="/profile" className="flex min-w-0 flex-1 items-center gap-2 rounded-[8px] px-2 py-1.5 text-sm text-ink-2 transition-colors hover:text-ink">
+        <Link to="/profile" className="flex min-w-0 flex-1 items-center gap-2.5 rounded-[8px] px-2 py-1.5 text-sm text-ink-2 transition-colors hover:text-ink">
+          <Avatar name={displayName(user)} src={user.avatarUrl} size="sm" />
           <span className="truncate">{displayName(user)}</span>
         </Link>
         {user.role === 'ADMIN' && (

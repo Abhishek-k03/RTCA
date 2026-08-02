@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../api/endpoints'
 import { conversationTitle, displayName } from '../lib'
@@ -20,6 +20,18 @@ export default function ContextPanel({ conversation: c, meId, presence, onChange
   const isOwner = myRole === 'OWNER'
   const canManage = !removed && (isOwner || myRole === 'ADMIN')
   const other = !isGroup ? c.participants.find((p) => p.userId !== meId) : null
+  const otherId = other?.userId
+  const [bio, setBio] = useState(null)
+
+  // the bio isn't part of the chat, fetch it when the panel opens
+  useEffect(() => {
+    if (!otherId) return
+    let active = true
+    api.user(otherId).then((u) => active && setBio(u.bio)).catch(() => {})
+    return () => {
+      active = false
+    }
+  }, [otherId])
 
   const act = async (fn) => {
     setError(null)
@@ -49,13 +61,15 @@ export default function ContextPanel({ conversation: c, meId, presence, onChange
         <button className="icon-btn -mt-1.5 -mr-2" onClick={onClose} title="Close"><X size={16} /></button>
       </div>
 
-      <h2 className="mt-8 font-serif text-[34px] leading-[1.05] break-words text-ink">{conversationTitle(c, meId)}</h2>
+      {other && <div className="mt-8"><Avatar name={displayName(other)} src={other.avatarUrl} size="xl" /></div>}
+      <h2 className={`${other ? 'mt-6' : 'mt-8'} font-serif text-[34px] leading-[1.05] break-words text-ink`}>{conversationTitle(c, meId)}</h2>
       <div className="mt-3">
         {isGroup
           ? <p className="eyebrow">{c.participants.length} members{removed && ' · read only'}</p>
           : <PresenceDot status={presence[other?.userId]} />}
       </div>
       {other && <p className="mt-1 text-[13px] text-ink-3">@{other.username}</p>}
+      {bio && <p className="mt-5 text-sm leading-relaxed break-words whitespace-pre-wrap text-ink-2">{bio}</p>}
 
       {canManage && (
         <form className="mt-8 flex items-end gap-3" onSubmit={(e) => {
@@ -77,7 +91,7 @@ export default function ContextPanel({ conversation: c, meId, presence, onChange
           <ul className="mt-4 flex flex-col gap-4">
             {c.participants.map((p) => (
               <li key={p.userId} className="flex items-center gap-3">
-                <Avatar name={displayName(p)} size="sm" online={p.userId !== meId && presence[p.userId]?.online} />
+                <Avatar name={displayName(p)} src={p.avatarUrl} size="sm" online={p.userId !== meId && presence[p.userId]?.online} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm text-ink">
                     {displayName(p)}{p.userId === meId && <span className="text-ink-3"> · you</span>}

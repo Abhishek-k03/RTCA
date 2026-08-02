@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../api/endpoints'
-import { conversationTitle, displayName } from '../lib'
+import { conversationAvatar, conversationTitle, displayName } from '../lib'
 import Avatar from './Avatar'
 
 function matchesChat(c, q, meId) {
@@ -50,7 +50,7 @@ export default function SearchPanel({ query, conversations, meId, recents, onOpe
             <li key={`${r.type}:${r.id}`} className="group flex items-center pr-4 transition-colors duration-150 hover:bg-outgoing/60">
               <button className="flex min-w-0 flex-1 items-center gap-4 py-2.5 pl-6 text-left"
                 onClick={() => (r.type === 'chat' ? onOpenChat(r) : onOpenUser(r))}>
-                <Avatar name={r.type === 'chat' ? r.title : displayName(r)} size="sm" />
+                <Avatar name={r.type === 'chat' ? r.title : displayName(r)} src={r.avatarUrl} size="sm" />
                 <span className="truncate text-sm text-ink">{r.type === 'chat' ? r.title : displayName(r)}</span>
               </button>
               <button className="icon-btn opacity-0 group-hover:opacity-100 focus:opacity-100" title="Remove"
@@ -78,8 +78,8 @@ export default function SearchPanel({ query, conversations, meId, recents, onOpe
           {chats.map((c) => (
             <li key={c.id}>
               <button className={rowClass}
-                onClick={() => onOpenChat({ type: 'chat', id: c.id, title: conversationTitle(c, meId) })}>
-                <Avatar name={conversationTitle(c, meId)} size="sm" />
+                onClick={() => onOpenChat({ type: 'chat', id: c.id, title: conversationTitle(c, meId), avatarUrl: conversationAvatar(c, meId) })}>
+                <Avatar name={conversationTitle(c, meId)} src={conversationAvatar(c, meId)} size="sm" />
                 <span className="truncate text-sm text-ink">{conversationTitle(c, meId)}</span>
               </button>
             </li>
@@ -92,7 +92,7 @@ export default function SearchPanel({ query, conversations, meId, recents, onOpe
           {others.map((u) => (
             <li key={u.id}>
               <button className={rowClass} onClick={() => onOpenUser({ type: 'user', ...u })}>
-                <Avatar name={displayName(u)} size="sm" />
+                <Avatar name={displayName(u)} src={u.avatarUrl} size="sm" />
                 <span className="truncate text-sm text-ink">
                   {displayName(u)} <span className="text-ink-3">@{u.username}</span>
                 </span>

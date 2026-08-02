@@ -17,20 +17,39 @@ export const setToken = (t) => {
 export const getToken = () => token
 export const setOnUnauthorized = (fn) => { onUnauthorized = fn }
 
-export async function request(method, path, body) {
+async function send(method, path, { json, form } = {}) {
   const headers = {}
-  if (body !== undefined) headers['Content-Type'] = 'application/json'
+  if (json !== undefined) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
 
   const res = await fetch(path, {
     method,
     headers,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: form ?? (json !== undefined ? JSON.stringify(json) : undefined),
   })
-
   if (res.status === 401 && token) onUnauthorized()
+  return res
+}
+
+async function parse(res) {
   const text = await res.text()
-  const data = text ? JSON.parse(text) : null
+  let data = null
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    // not json, e.g. a proxy error page
+  }
   if (!res.ok) throw new ApiError(res.status, data?.message || res.statusText, data?.fieldErrors)
   return data
+}
+
+export const request = async (method, path, body) => parse(await send(method, path, { json: body }))
+
+export const upload = async (method, path, form) => parse(await send(method, path, { form }))
+
+// images need the auth header too, so they can't be plain <img src> urls
+export async function fetchFile(path) {
+  const res = await send('GET', path)
+  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  return res.blob()
 }

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { Navigate } from 'react-router'
 import { getToken, setOnUnauthorized, setToken } from '../api/client'
 import { api } from '../api/endpoints'
+import { clearFileCache } from '../api/files'
 
 const AuthContext = createContext(null)
 
@@ -14,6 +15,7 @@ export function AuthProvider({ children }) {
     setToken(null)
     setTokenState(null)
     setUser(null)
+    clearFileCache()
   }, [])
 
   useEffect(() => setOnUnauthorized(logout), [logout])

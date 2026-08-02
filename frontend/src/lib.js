@@ -6,6 +6,12 @@ export function conversationTitle(c, meId) {
   return other ? displayName(other) : 'Just you'
 }
 
+// direct chats show the other person's photo, groups have none
+export function conversationAvatar(c, meId) {
+  if (c.type === 'GROUP') return null
+  return c.participants.find((p) => p.userId !== meId)?.avatarUrl ?? null
+}
+
 export function initials(name = '') {
   const parts = name.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return '·'

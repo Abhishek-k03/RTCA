@@ -1,4 +1,4 @@
-import { request } from './client'
+import { request, upload } from './client'
 
 const qs = (params) => {
   const s = new URLSearchParams(
@@ -7,12 +7,20 @@ const qs = (params) => {
   return s ? `?${s}` : ''
 }
 
+const form = (fields) => {
+  const f = new FormData()
+  Object.entries(fields).forEach(([k, v]) => v !== undefined && v !== null && f.append(k, v))
+  return f
+}
+
 export const api = {
   register: (body) => request('POST', '/api/auth/register', body),
   login: (login, password) => request('POST', '/api/auth/login', { login, password }),
 
   me: () => request('GET', '/api/users/me'),
-  updateMe: (displayName) => request('PATCH', '/api/users/me', { displayName }),
+  updateMe: (displayName, bio) => request('PATCH', '/api/users/me', { displayName, bio }),
+  uploadAvatar: (blob) => upload('PUT', '/api/users/me/avatar', form({ file: blob })),
+  removeAvatar: () => request('DELETE', '/api/users/me/avatar'),
   user: (id) => request('GET', `/api/users/${id}`),
   searchUsers: (q) => request('GET', `/api/users/search${qs({ q, size: 20 })}`),
 
@@ -32,6 +40,8 @@ export const api = {
     request('GET', `/api/conversations/${id}/messages${qs({ before, after, limit })}`),
   sendMessage: (id, clientMessageId, content) =>
     request('POST', `/api/conversations/${id}/messages`, { clientMessageId, content }),
+  sendImage: (id, clientMessageId, blob, caption, width, height) =>
+    upload('POST', `/api/conversations/${id}/messages/images`, form({ file: blob, clientMessageId, caption, width, height })),
   editMessage: (id, messageId, content) =>
     request('PATCH', `/api/conversations/${id}/messages/${messageId}`, { content }),
   // scope: 'me' | 'everyone'

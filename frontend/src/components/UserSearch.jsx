@@ -25,7 +25,7 @@ export default function UserSearch({ onPick, excludeIds = [], placeholder = 'Sea
         {shown.map((u) => (
           <li key={u.id}>
             <button className="group flex w-full items-center gap-3 py-2 text-left" onClick={() => onPick(u)}>
-              <Avatar name={displayName(u)} size="sm" />
+              <Avatar name={displayName(u)} src={u.avatarUrl} size="sm" />
               <span className="min-w-0 flex-1 truncate text-sm text-ink">
                 {displayName(u)} <span className="text-ink-3">@{u.username}</span>
               </span>

@@ -98,7 +98,7 @@ export default function ChatPage() {
           lastMessageAt: m.createdAt,
           lastMessage: {
             id: m.id, senderId: m.senderId, senderName: sender ? displayName(sender) : m.senderUsername,
-            content: m.content, deleted: false, createdAt: m.createdAt,
+            content: m.content, type: m.type, deleted: false, createdAt: m.createdAt,
           },
           unreadCount: (c.unreadCount ?? 0) + (bump ? 1 : 0),
         }
@@ -143,7 +143,7 @@ export default function ChatPage() {
 
   // a new direct chat stays out of the list until the first message is sent
   const openUser = async (entry) => {
-    recents.add({ type: 'user', id: entry.id, username: entry.username, displayName: entry.displayName })
+    recents.add({ type: 'user', id: entry.id, username: entry.username, displayName: entry.displayName, avatarUrl: entry.avatarUrl })
     try {
       const c = await api.createDirect(entry.id)
       navigate(`/c/${c.id}`)
