@@ -2,7 +2,6 @@ import { useState } from 'react'
 import { Link } from 'react-router'
 import { LogOut, Monitor, Moon, Plus, Search, Shield, Sun, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
-import { useStomp } from '../ws/StompContext'
 import { useTheme } from '../theme'
 import { displayName } from '../lib'
 import Avatar from './Avatar'
@@ -15,7 +14,6 @@ const THEME_ICON = { system: Monitor, light: Sun, dark: Moon }
 
 export default function Sidebar({ conversations, activeId, recents, onOpenChat, onOpenUser, onGroupCreated, className = '' }) {
   const { user, logout } = useAuth()
-  const { connected } = useStomp()
   const { theme, next } = useTheme()
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
@@ -34,13 +32,8 @@ export default function Sidebar({ conversations, activeId, recents, onOpenChat, 
 
   return (
     <aside className={`flex min-h-0 flex-col bg-canvas ${className}`}>
-      <div className="flex items-end justify-between px-6 pt-8 pb-6">
+      <div className="px-6 pt-8 pb-6">
         <Brand />
-        <span className={`meta mb-0.5 inline-flex items-center gap-1.5 ${connected ? '' : 'text-accent'}`}
-          title={connected ? 'Connected' : 'Reconnecting'}>
-          <span className={`size-1.5 rounded-full ${connected ? 'bg-sage' : 'animate-pulse bg-accent'}`} />
-          {connected ? 'live' : 'offline'}
-        </span>
       </div>
 
       <div className="px-6 pb-2">
