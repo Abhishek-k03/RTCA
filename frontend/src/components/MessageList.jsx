@@ -1,8 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, CheckCheck, Copy, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, CheckCheck, Copy, Image as ImageIcon, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { useFileUrl } from '../api/files'
 import { dateHeading, formatClock, sameDay, withinWindow } from '../lib'
+import ImageViewer from './ImageViewer'
 
 const GROUP_GAP_MS = 5 * 60 * 1000
+const IMAGE_MAX_W = 360
+const IMAGE_MAX_H = 420
 
 // consecutive messages from one sender, same day, close together
 function groupMessages(messages) {
@@ -43,6 +47,7 @@ function Receipt({ status }) {
 function Toolbar({ m, mine, readOnly, onEdit, onDelete, align }) {
   const [menu, setMenu] = useState(false)
   const canChange = mine && !readOnly && !m.deleted && !m.pending && withinWindow(m.createdAt)
+  const canEdit = canChange && m.type !== 'IMAGE'
 
   useEffect(() => {
     if (!menu) return
@@ -56,8 +61,8 @@ function Toolbar({ m, mine, readOnly, onEdit, onDelete, align }) {
 
   return (
     <div className={`absolute -top-6 z-10 flex translate-y-0.5 items-center gap-0.5 rounded-[8px] border border-hairline bg-elevated p-0.5 opacity-0 shadow-[0_1px_2px_rgba(28,27,25,0.05)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 ${menu ? 'translate-y-0 opacity-100' : ''} ${align}`}>
-      <button className={btn} title="Copy" onClick={() => navigator.clipboard?.writeText(m.content)}><Copy size={14} /></button>
-      {canChange && <button className={btn} title="Edit" onClick={() => onEdit(m)}><Pencil size={14} /></button>}
+      {m.content && <button className={btn} title="Copy" onClick={() => navigator.clipboard?.writeText(m.content)}><Copy size={14} /></button>}
+      {canEdit && <button className={btn} title="Edit" onClick={() => onEdit(m)}><Pencil size={14} /></button>}
       <div className="relative">
         <button className={btn} title="Delete" onClick={(e) => {
           e.stopPropagation()
@@ -78,9 +83,36 @@ function Toolbar({ m, mine, readOnly, onEdit, onDelete, align }) {
   )
 }
 
-function Body({ m, mine }) {
+// space is reserved from the known size, so loading doesn't shift the list
+function Photo({ image, onOpen }) {
+  const url = useFileUrl(image.url)
+  const ratio = image.width && image.height ? image.width / image.height : 4 / 3
+  const width = Math.min(IMAGE_MAX_W, image.width || IMAGE_MAX_W, IMAGE_MAX_H * ratio)
+  return (
+    <button type="button" className="grid max-w-full place-items-center overflow-hidden rounded-[7px] bg-ink/5"
+      style={{ width, aspectRatio: ratio }} title="View photo" disabled={!url} onClick={() => onOpen(url)}>
+      {url
+        ? <img src={url} alt="" className="size-full object-cover" />
+        : <ImageIcon size={20} className="animate-pulse text-ink-3" />}
+    </button>
+  )
+}
+
+function Body({ m, mine, onOpenImage }) {
   if (m.deleted) {
     return <p className="text-[14px] text-ink-3 italic">{mine ? 'You deleted this message.' : 'This message was deleted.'}</p>
+  }
+  if (m.type === 'IMAGE' && m.image) {
+    return (
+      <>
+        <Photo image={m.image} onOpen={onOpenImage} />
+        {m.content && (
+          <p className={`max-w-[360px] text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink ${mine ? 'px-2.5 pt-2 pb-1' : 'pt-2'}`}>
+            {m.content}
+          </p>
+        )}
+      </>
+    )
   }
   return (
     <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink">
@@ -90,7 +122,7 @@ function Body({ m, mine }) {
   )
 }
 
-function Group({ group, meId, showName, readOnly, nameOf, status, onRetry, onEdit, onDelete }) {
+function Group({ group, meId, showName, readOnly, nameOf, status, onRetry, onEdit, onDelete, onOpenImage }) {
   const mine = group.senderId === meId
   const last = group.items.at(-1)
 
@@ -105,12 +137,12 @@ function Group({ group, meId, showName, readOnly, nameOf, status, onRetry, onEdi
         {group.items.map((m) => (
           <div key={m.id ?? m.clientMessageId} tabIndex={0}
             className={`group animate-rise relative max-w-[82%] outline-none md:max-w-[70%] ${mine
-              ? `rounded-[10px] px-4 py-2.5 ${m.deleted ? 'border border-dashed border-hairline' : 'bg-outgoing'}`
+              ? `rounded-[10px] ${m.image && !m.deleted ? 'p-1.5' : 'px-4 py-2.5'} ${m.deleted ? 'border border-dashed border-hairline' : 'bg-outgoing'}`
               : 'py-0.5'} ${m.pending ? 'opacity-70' : ''}`}>
             <Toolbar m={m} mine={mine} readOnly={readOnly} onEdit={onEdit} onDelete={onDelete} align={mine ? 'right-2' : 'left-0'} />
-            <Body m={m} mine={mine} />
+            <Body m={m} mine={mine} onOpenImage={onOpenImage} />
             {m.pending && (
-              <button className="meta mt-1 inline-flex items-center gap-1 hover:text-accent" onClick={() => onRetry(m)}>
+              <button className={`meta mt-1 inline-flex items-center gap-1 hover:text-accent ${m.image ? 'px-2.5 pb-1' : ''}`} onClick={() => onRetry(m)}>
                 <RotateCcw size={11} /> retry
               </button>
             )}
@@ -127,6 +159,7 @@ function Group({ group, meId, showName, readOnly, nameOf, status, onRetry, onEdi
 
 export default function MessageList({ messages, meId, isGroup, readOnly, nameOf, status, onRetry, onEdit, onDelete, hasMore, onLoadOlder }) {
   const ref = useRef(null)
+  const [viewing, setViewing] = useState(null)
   const last = messages.at(-1)
   const lastKey = last ? last.id ?? last.clientMessageId : null
 
@@ -159,11 +192,12 @@ export default function MessageList({ messages, meId, isGroup, readOnly, nameOf,
             <div key={first.id ?? first.clientMessageId} className="flex flex-col">
               {newDay && <DateSeparator iso={first.createdAt} />}
               <Group group={g} meId={meId} showName={isGroup} readOnly={readOnly} nameOf={nameOf} status={status}
-                onRetry={onRetry} onEdit={onEdit} onDelete={onDelete} />
+                onRetry={onRetry} onEdit={onEdit} onDelete={onDelete} onOpenImage={setViewing} />
             </div>
           )
         })}
       </div>
+      {viewing && <ImageViewer url={viewing} onClose={() => setViewing(null)} />}
     </div>
   )
 }

@@ -5,6 +5,8 @@ import { useAuth } from '../auth/AuthContext'
 import { api } from '../api/endpoints'
 import { useStomp, useTopic } from '../ws/StompContext'
 import { usePresence } from '../ws/usePresence'
+import { primeFileUrl } from '../api/files'
+import { prepareImage } from '../image'
 import { conversationTitle, displayName } from '../lib'
 import ConfirmButton from './ConfirmButton'
 import ContextPanel from './ContextPanel'
@@ -87,8 +89,16 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
   const removed = !!conv?.removedAt
 
   // removed members get no live events, the server would reject the subscribe
+  // our own photo: keep showing the local copy instead of downloading it again
+  const adoptLocalImage = (m) => {
+    const local = messagesRef.current.find((x) =>
+      x.image?.local && x.clientMessageId === m.clientMessageId && m.senderId === user.id)
+    if (local && m.image) primeFileUrl(m.image.url, local.image.url)
+  }
+
   useTopic(conv && !removed ? `/topic/conversations.${id}` : null, ({ type, payload: p }) => {
     if (type === 'MESSAGE') {
+      adoptLocalImage(p)
       setMessages((l) => upsert(l, { ...p, pending: false }))
       if (p.senderId !== user.id) setUserTyping(p.senderId, null, false)
     } else if (type === 'EDITED') {
@@ -176,6 +186,35 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     if (!publish(`/app/conversations.${id}.send`, { clientMessageId, content })) sendRest(clientMessageId, content)
   }
 
+  // images always go over rest, the socket only carries json
+  const uploadImage = (clientMessageId, { blob, width, height }, caption) =>
+    api.sendImage(id, clientMessageId, blob, caption, width, height)
+      .then((m) => {
+        adoptLocalImage(m)
+        setMessages((l) => upsert(l, { ...m, pending: false, upload: null }))
+      })
+      .catch((err) => pushError(err.message))
+
+  const sendImage = async (file, caption) => {
+    let prepared
+    try {
+      prepared = await prepareImage(file)
+    } catch (err) {
+      pushError(err.message)
+      return
+    }
+    const clientMessageId = crypto.randomUUID()
+    const { blob, width, height } = prepared
+    setMessages((l) => [...l, {
+      clientMessageId, content: caption, senderId: user.id, senderUsername: user.username, type: 'IMAGE',
+      image: { url: URL.createObjectURL(blob), width, height, local: true }, upload: prepared,
+      createdAt: new Date().toISOString(), pending: true,
+    }])
+    uploadImage(clientMessageId, prepared, caption)
+  }
+
+  const retry = (m) => (m.upload ? uploadImage(m.clientMessageId, m.upload, m.content) : sendRest(m.clientMessageId, m.content))
+
   const saveEdit = (m, content) => {
     setEditing(null)
     api.editMessage(id, m.id, content)
@@ -250,7 +289,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
         </header>
 
         <MessageList messages={messages} meId={user.id} isGroup={isGroup} readOnly={removed} nameOf={nameOf} status={receipt}
-          onRetry={(m) => sendRest(m.clientMessageId, m.content)}
+          onRetry={retry}
           onEdit={setEditing} onDelete={deleteMessage}
           hasMore={hasMore} onLoadOlder={loadOlder} />
 
@@ -266,7 +305,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
         ) : (
           <>
             <TypingIndicator names={Object.values(typing)} />
-            <MessageInput onSend={send} editing={editing} onSubmitEdit={saveEdit} onCancelEdit={() => setEditing(null)}
+            <MessageInput onSend={send} onSendImage={sendImage} editing={editing} onSubmitEdit={saveEdit} onCancelEdit={() => setEditing(null)}
               onTyping={(t) => publish(`/app/conversations.${id}.typing`, { typing: t })} />
           </>
         )}
