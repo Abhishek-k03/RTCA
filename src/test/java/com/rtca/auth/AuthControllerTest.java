@@ -3,13 +3,16 @@ package com.rtca.auth;
 import com.rtca.auth.dto.AuthResponse;
 import com.rtca.auth.jwt.JwtAuthenticationFilter;
 import com.rtca.auth.jwt.JwtService;
+import com.rtca.auth.refresh.RefreshTokenProperties;
 import com.rtca.common.config.SecurityConfig;
 import com.rtca.common.exception.ConflictException;
 import com.rtca.user.Role;
 import com.rtca.user.dto.UserResponse;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -22,13 +25,19 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.cookie;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import java.util.UUID;
 
 @WebMvcTest(AuthController.class)
-@Import({SecurityConfig.class, JwtAuthenticationFilter.class})
+@Import({SecurityConfig.class, JwtAuthenticationFilter.class, AuthControllerTest.Config.class})
 class AuthControllerTest {
+
+    @TestConfiguration
+    @EnableConfigurationProperties(RefreshTokenProperties.class)
+    static class Config {
+    }
 
     @Autowired MockMvc mvc;
 
@@ -79,7 +88,8 @@ class AuthControllerTest {
 
     @Test
     void loginReturnsToken() throws Exception {
-        when(authService.login(any())).thenReturn(new AuthResponse("jwt", "Bearer", 3600, alice));
+        when(authService.login(any()))
+                .thenReturn(new AuthService.Session(new AuthResponse("jwt", "Bearer", 3600, alice), "refresh"));
 
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -87,7 +97,11 @@ class AuthControllerTest {
                                 {"login":"alice","password":"password1"}
                                 """))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.accessToken").value("jwt"));
+                .andExpect(jsonPath("$.accessToken").value("jwt"))
+                .andExpect(jsonPath("$.refreshToken").doesNotExist())
+                .andExpect(cookie().value("refresh_token", "refresh"))
+                .andExpect(cookie().httpOnly("refresh_token", true))
+                .andExpect(cookie().path("refresh_token", "/api/auth"));
     }
 
     @Test

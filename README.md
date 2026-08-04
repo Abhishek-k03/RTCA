@@ -4,7 +4,7 @@ A backend for a real-time chat application built with Spring Boot. It supports o
 
 ## Features
 
-- Registration and login with JWT, plus role-based access (`USER`, `ADMIN`)
+- Registration and login with short-lived JWTs and rotating refresh tokens, plus role-based access (`USER`, `ADMIN`)
 - Direct (1:1) and group conversations with owner/admin/member roles
 - Real-time messaging over STOMP, with a REST fallback
 - Message history with cursor (keyset) pagination
@@ -38,7 +38,7 @@ Code is organized by feature, and each feature package is layered:
 
 | Package | Responsibility |
 |---|---|
-| `auth` | register/login, JWT issue and validation, security principal |
+| `auth` | register/login, JWT issue and validation, refresh tokens, security principal |
 | `user` | profiles, search, admin user management |
 | `conversation` | direct and group chats, membership, roles |
 | `message` | sending, history, receipts |
@@ -76,7 +76,9 @@ docker compose up -d postgres redis
 | `DB_HOST` / `DB_PORT` / `DB_NAME` / `DB_USER` / `DB_PASSWORD` | `localhost` / `5432` / `rtca` / `rtca` / `rtca` | |
 | `REDIS_HOST` / `REDIS_PORT` | `localhost` / `6379` | |
 | `JWT_SECRET` | dev value | base64, at least 256 bits. **Set this in production** |
-| `JWT_TTL` | `1h` | |
+| `JWT_TTL` | `15m` | access token lifetime |
+| `REFRESH_TTL` | `30d` | refresh token lifetime, renewed on every refresh |
+| `REFRESH_COOKIE_SECURE` | `true` | marks the refresh cookie `Secure`. Browsers allow that on `localhost`; set `false` only for plain-HTTP access from another host |
 | `WS_ALLOWED_ORIGINS` | `*` | comma separated |
 | `MSG_RATE_LIMIT` / `MSG_RATE_WINDOW` | `20` / `10s` | messages per user per window |
 | `MSG_EDIT_WINDOW` / `MSG_DELETE_WINDOW` | `15m` / `15m` | how long a sender can edit or delete for everyone |
@@ -90,7 +92,9 @@ All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` head
 | Method | Path | Description |
 |---|---|---|
 | POST | `/api/auth/register` | create account |
-| POST | `/api/auth/login` | `{login, password}` returns access token |
+| POST | `/api/auth/login` | `{login, password}` returns an access token and sets the refresh cookie |
+| POST | `/api/auth/refresh` | new access token from the refresh cookie. The refresh token is replaced each time |
+| POST | `/api/auth/logout` | ends this session and clears the cookie |
 | GET / PATCH | `/api/users/me` | own profile. PATCH `{displayName, bio}`, a blank bio clears it |
 | PUT / DELETE | `/api/users/me/avatar` | set (multipart `file`, up to 2 MB) or remove your profile picture |
 | GET | `/api/users/{id}` | public profile |
@@ -199,6 +203,12 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
 
 ### Security
 - Stateless JWT auth, with BCrypt password hashes.
+- Sessions:
+  - Access tokens last 15 minutes and are kept in memory by the frontend, never in local storage.
+  - The refresh token is an `HttpOnly`, `SameSite=Strict`, `Secure` cookie scoped to `/api/auth`, so scripts can't read it and other sites can't send it.
+  - Only a SHA-256 hash of each refresh token is stored.
+  - Every refresh replaces the token. If a replaced token is used again later, it has leaked, so the whole session is revoked. A 30 second grace period lets two tabs refresh at the same time.
+  - Signing out revokes the session on the server. Role changes take effect at the next refresh.
 - WebSocket sessions are authenticated on CONNECT, and every SUBSCRIBE to a conversation topic is checked for membership.
 - Users and conversations are exposed only by random UUIDs (`public_id`) in URLs, request/response bodies, WebSocket topics and events; the numeric ids stay internal. Ids can't be guessed or counted, and the JWT subject is the public id too.
 - Users who aren't members get `404` rather than `403`, so conversation ids don't leak.
@@ -214,7 +224,7 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
 ./mvnw verify
 ```
 
-- Unit tests cover the auth service and JWT handling. MockMvc tests cover the auth endpoints and error mapping.
+- Unit tests cover the auth service and JWT handling. MockMvc tests cover the auth endpoints, the refresh cookie and error mapping.
 - Integration tests use Testcontainers for real Postgres and Redis (Docker required). They cover:
   - concurrent direct-chat creation
   - idempotent sends
@@ -226,11 +236,12 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
   - clearing and deleting chats
   - public ids: numeric or unknown ids are rejected, users can't be listed by counting
   - editing and deleting messages, including the time limit
+  - refresh tokens: rotation, parallel refreshes, reuse revoking the session, logout and expiry
   - profiles, profile pictures and image messages: type checks, size limits, access for members, removed members and non-members
 
 ## Possible improvements
 
-- Refresh tokens and token revocation
+- A denylist for access tokens, so sign-out also cuts off the current 15 minute token
 - An external broker relay (RabbitMQ/ActiveMQ STOMP) instead of the simple broker plus Redis relay
 - An outbox table for guaranteed event delivery when Redis is down for a long time
 - S3-compatible storage behind `FileStorage` for running several instances without a shared volume

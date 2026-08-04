@@ -4,6 +4,7 @@ import com.rtca.auth.dto.AuthResponse;
 import com.rtca.auth.dto.LoginRequest;
 import com.rtca.auth.dto.RegisterRequest;
 import com.rtca.auth.jwt.JwtService;
+import com.rtca.auth.refresh.RefreshTokenService;
 import com.rtca.common.exception.ConflictException;
 import com.rtca.common.exception.UnauthorizedException;
 import com.rtca.user.User;
@@ -25,6 +26,11 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
+    private final RefreshTokenService refreshTokens;
+
+    /** The access token goes in the body, the refresh token only ever in a cookie. */
+    public record Session(AuthResponse response, String refreshToken) {
+    }
 
     @Transactional
     public UserResponse register(RegisterRequest request) {
@@ -48,8 +54,8 @@ public class AuthService {
         return UserResponse.from(userRepository.save(user));
     }
 
-    @Transactional(readOnly = true)
-    public AuthResponse login(LoginRequest request) {
+    @Transactional
+    public Session login(LoginRequest request) {
         String username;
         try {
             username = authenticationManager.authenticate(
@@ -61,11 +67,27 @@ public class AuthService {
         User user = userRepository.findByUsername(username)
                 .orElseThrow(() -> new UnauthorizedException("Invalid credentials"));
 
-        return new AuthResponse(
+        return session(user, refreshTokens.issue(user.getId()));
+    }
+
+    /** Rotates the refresh token. The new access token picks up role changes. */
+    public Session refresh(String refreshToken) {
+        RefreshTokenService.Rotated rotated = refreshTokens.rotate(refreshToken);
+        User user = userRepository.findById(rotated.userId())
+                .orElseThrow(() -> new UnauthorizedException("Session expired, please sign in again"));
+        return session(user, rotated.token());
+    }
+
+    public void logout(String refreshToken) {
+        refreshTokens.revoke(refreshToken);
+    }
+
+    private Session session(User user, String refreshToken) {
+        return new Session(new AuthResponse(
                 jwtService.generateAccessToken(user),
                 "Bearer",
                 jwtService.getAccessTokenTtlSeconds(),
                 UserResponse.from(user)
-        );
+        ), refreshToken);
     }
 }
