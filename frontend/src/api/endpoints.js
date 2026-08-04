@@ -16,6 +16,7 @@ const form = (fields) => {
 export const api = {
   register: (body) => request('POST', '/api/auth/register', body),
   login: (login, password) => request('POST', '/api/auth/login', { login, password }),
+  logout: () => request('POST', '/api/auth/logout'),
 
   me: () => request('GET', '/api/users/me'),
   updateMe: (displayName, bio) => request('PATCH', '/api/users/me', { displayName, bio }),

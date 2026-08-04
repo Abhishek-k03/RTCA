@@ -1,39 +1,45 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { Navigate } from 'react-router'
-import { getToken, setOnUnauthorized, setToken } from '../api/client'
+import { refreshSession, setOnUnauthorized, setToken } from '../api/client'
 import { api } from '../api/endpoints'
 import { clearFileCache } from '../api/files'
 
 const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
-  const [token, setTokenState] = useState(getToken())
   const [user, setUser] = useState(null)
-  const [loading, setLoading] = useState(!!getToken())
+  const [loading, setLoading] = useState(true)
 
-  const logout = useCallback(() => {
+  // local only, for when the server already ended the session
+  const clear = useCallback(() => {
     setToken(null)
-    setTokenState(null)
     setUser(null)
     clearFileCache()
   }, [])
 
-  useEffect(() => setOnUnauthorized(logout), [logout])
+  const logout = useCallback(() => {
+    api.logout().catch(() => {})
+    clear()
+  }, [clear])
 
+  useEffect(() => setOnUnauthorized(clear), [clear])
+
+  // the refresh cookie brings the session back after a reload
   useEffect(() => {
-    if (!token || user) return
-    api.me().then(setUser).catch(logout).finally(() => setLoading(false))
-  }, [token, user, logout])
+    refreshSession()
+      .then((data) => data && setUser(data.user))
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [])
 
   const login = async (login, password) => {
     const res = await api.login(login, password)
     setToken(res.accessToken)
     setUser(res.user)
-    setTokenState(res.accessToken)
   }
 
   return (
-    <AuthContext.Provider value={{ token, user, setUser, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, setUser, loading, login, logout }}>
       {children}
     </AuthContext.Provider>
   )
@@ -42,9 +48,9 @@ export function AuthProvider({ children }) {
 export const useAuth = () => useContext(AuthContext)
 
 export function RequireAuth({ children }) {
-  const { token, user, loading } = useAuth()
-  if (!token) return <Navigate to="/login" replace />
-  if (loading || !user) return <p className="eyebrow grid h-full place-items-center">Opening correspondence…</p>
+  const { user, loading } = useAuth()
+  if (loading) return <p className="eyebrow grid h-full place-items-center">Opening correspondence…</p>
+  if (!user) return <Navigate to="/login" replace />
   return children
 }
 

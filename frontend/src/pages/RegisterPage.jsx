@@ -14,13 +14,14 @@ const fields = [
 ]
 
 export default function RegisterPage() {
-  const { token, login } = useAuth()
+  const { user, loading, login } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ username: '', email: '', password: '', displayName: '' })
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  if (token) return <Navigate to="/" replace />
+  if (loading) return null
+  if (user) return <Navigate to="/" replace />
 
   const submit = async (e) => {
     e.preventDefault()

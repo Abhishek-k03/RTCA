@@ -1,11 +1,13 @@
 import { Client } from '@stomp/stompjs'
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react'
+import { freshToken } from '../api/client'
 import { useAuth } from '../auth/AuthContext'
 
 const StompContext = createContext(null)
 
 export function StompProvider({ children }) {
-  const { token } = useAuth()
+  const { user } = useAuth()
+  const signedIn = !!user
   const clientRef = useRef(null)
   // id -> { dest, cb, sub }, resubscribed on every (re)connect
   const subsRef = useRef(new Map())
@@ -24,10 +26,13 @@ export function StompProvider({ children }) {
   }
 
   useEffect(() => {
-    if (!token) return
+    if (!signedIn) return
     const client = new Client({
       brokerURL: `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`,
-      connectHeaders: { Authorization: `Bearer ${token}` },
+      // access tokens are short lived, so get a fresh one for every (re)connect
+      beforeConnect: async (c) => {
+        c.connectHeaders = { Authorization: `Bearer ${await freshToken()}` }
+      },
       heartbeatIncoming: 10000,
       heartbeatOutgoing: 10000,
       reconnectDelay: 3000,
@@ -46,7 +51,7 @@ export function StompProvider({ children }) {
       setConnected(false)
       client.deactivate()
     }
-  }, [token, pushError])
+  }, [signedIn, pushError])
 
   const subscribe = useCallback((dest, cb) => {
     const id = ++nextId.current

@@ -6,18 +6,59 @@ export class ApiError extends Error {
   }
 }
 
-let token = localStorage.getItem('token')
+// the access token lives in memory only, the refresh token is an http-only cookie
+let token = null
+let refreshing = null
 let onUnauthorized = () => {}
 
-export const setToken = (t) => {
-  token = t
-  if (t) localStorage.setItem('token', t)
-  else localStorage.removeItem('token')
+// older versions kept the access token in local storage
+try {
+  localStorage.removeItem('token')
+} catch {
+  // storage blocked, nothing to clean up
 }
-export const getToken = () => token
+
+export const setToken = (t) => { token = t }
 export const setOnUnauthorized = (fn) => { onUnauthorized = fn }
 
-async function send(method, path, { json, form } = {}) {
+/**
+ * Swaps the refresh cookie for a new access token. Resolves to the auth response,
+ * or null when the session is over. Throws when the server can't be reached.
+ * Callers at the same time share one request.
+ */
+export function refreshSession() {
+  refreshing ??= fetch('/api/auth/refresh', { method: 'POST' })
+    .then(async (res) => {
+      if (res.status === 401) return null
+      if (!res.ok) throw new ApiError(res.status, res.statusText)
+      const data = await res.json()
+      token = data.accessToken
+      return data
+    })
+    .finally(() => {
+      refreshing = null
+    })
+  return refreshing
+}
+
+function secondsLeft(t) {
+  try {
+    const payload = JSON.parse(atob(t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.exp - Date.now() / 1000
+  } catch {
+    return 0
+  }
+}
+
+// for the websocket connect, which can't retry on a 401 like fetch does
+export async function freshToken() {
+  if (token && secondsLeft(token) > 60) return token
+  const data = await refreshSession().catch(() => undefined)
+  if (data === null) onUnauthorized()
+  return token
+}
+
+async function send(method, path, { json, form } = {}, retry = true) {
   const headers = {}
   if (json !== undefined) headers['Content-Type'] = 'application/json'
   if (token) headers.Authorization = `Bearer ${token}`
@@ -27,7 +68,12 @@ async function send(method, path, { json, form } = {}) {
     headers,
     body: form ?? (json !== undefined ? JSON.stringify(json) : undefined),
   })
-  if (res.status === 401 && token) onUnauthorized()
+  // the access token expired: refresh once and try again
+  if (res.status === 401 && token && retry) {
+    const data = await refreshSession().catch(() => undefined)
+    if (data) return send(method, path, { json, form }, false)
+    if (data === null) onUnauthorized()
+  }
   return res
 }
 

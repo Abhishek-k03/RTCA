@@ -6,13 +6,14 @@ import AuthLayout from '../components/AuthLayout'
 import FormError from '../components/FormError'
 
 export default function LoginPage() {
-  const { token, login } = useAuth()
+  const { user, loading, login } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ login: '', password: '' })
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(false)
 
-  if (token) return <Navigate to="/" replace />
+  if (loading) return null
+  if (user) return <Navigate to="/" replace />
 
   const submit = async (e) => {
     e.preventDefault()
