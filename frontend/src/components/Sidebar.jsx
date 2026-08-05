@@ -1,7 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router'
-import { LogOut, Monitor, Moon, Plus, Search, Shield, Sun, X } from 'lucide-react'
+import { Bell, BellOff, LogOut, Monitor, Moon, Plus, Search, Shield, Sun, X } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
+import { useStomp } from '../ws/StompContext'
+import { notificationsSupported, useNotificationSetting } from '../notifications'
 import { useTheme } from '../theme'
 import { displayName } from '../lib'
 import Avatar from './Avatar'
@@ -14,6 +16,8 @@ const THEME_ICON = { system: Monitor, light: Sun, dark: Moon }
 
 export default function Sidebar({ conversations, activeId, recents, onOpenChat, onOpenUser, onGroupCreated, className = '' }) {
   const { user, logout } = useAuth()
+  const { pushError } = useStomp()
+  const notifications = useNotificationSetting()
   const { theme, next } = useTheme()
   const [searching, setSearching] = useState(false)
   const [query, setQuery] = useState('')
@@ -23,6 +27,12 @@ export default function Sidebar({ conversations, activeId, recents, onOpenChat, 
   const closeSearch = () => {
     setSearching(false)
     setQuery('')
+  }
+
+  const toggleNotifications = async () => {
+    if (await notifications.toggle() === 'denied') {
+      pushError('Notifications are blocked for this site in your browser settings')
+    }
   }
 
   const pick = (fn) => (entry) => {
@@ -85,6 +95,12 @@ export default function Sidebar({ conversations, activeId, recents, onOpenChat, 
         </Link>
         {user.role === 'ADMIN' && (
           <Link to="/admin" className="icon-btn" title="Administration"><Shield size={16} /></Link>
+        )}
+        {notificationsSupported && (
+          <button className="icon-btn" onClick={toggleNotifications}
+            title={notifications.on ? 'Notifications on' : 'Notifications off'}>
+            {notifications.on ? <Bell size={16} /> : <BellOff size={16} />}
+          </button>
         )}
         <button className="icon-btn" title={`Theme: ${theme}`} onClick={next}><ThemeIcon size={16} /></button>
         <button className="icon-btn" title="Sign out" onClick={logout}><LogOut size={16} /></button>

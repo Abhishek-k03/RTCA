@@ -5,8 +5,18 @@ import { api } from '../api/endpoints'
 import { useStomp, useTopic } from '../ws/StompContext'
 import { dateHeading, displayName } from '../lib'
 import { useRecentSearches } from '../recentSearches'
+import { notify } from '../notifications'
 import ChatWindow from '../components/ChatWindow'
 import Sidebar from '../components/Sidebar'
+
+const BASE_TITLE = document.title
+
+function notification(c, m) {
+  const sender = c.participants.find((p) => p.userId === m.senderId)
+  const name = sender ? displayName(sender) : m.senderUsername
+  const body = m.type === 'IMAGE' ? (m.content ? `Photo · ${m.content}` : 'Photo') : m.content
+  return { title: c.type === 'GROUP' ? `${name} · ${c.name}` : name, body, tag: c.id }
+}
 
 function EmptyState() {
   const { weekday, date } = dateHeading(new Date().toISOString())
@@ -35,7 +45,18 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState([])
   const recents = useRecentSearches(user.id)
   const activeRef = useRef(activeId)
-  useEffect(() => { activeRef.current = activeId })
+  const conversationsRef = useRef(conversations)
+  useEffect(() => {
+    activeRef.current = activeId
+    conversationsRef.current = conversations
+  })
+
+  // unread count in the tab title
+  const unread = conversations.reduce((n, c) => n + (c.removedAt ? 0 : c.unreadCount || 0), 0)
+  useEffect(() => {
+    document.title = unread ? `(${unread}) ${BASE_TITLE}` : BASE_TITLE
+  }, [unread])
+  useEffect(() => () => { document.title = BASE_TITLE }, [])
 
   // the open chat is being read, so a refetch racing its read receipt must not bring the badge back
   const applyList = useCallback((list) => {
@@ -88,11 +109,14 @@ export default function ChatPage() {
       if (type !== 'MESSAGE') return
       const mine = m.senderId === user.id
       if (!mine) publish(`/app/conversations.${cid}.delivered`, { messageId: m.id })
+      const known = conversationsRef.current.find((x) => x.id === cid)
+      if (!mine && known) notify({ ...notification(known, m), onClick: () => navigate(`/c/${cid}`) })
       setConversations((list) => {
         const c = list.find((x) => x.id === cid)
         if (!c) return list
         const sender = c.participants.find((p) => p.userId === m.senderId)
-        const bump = !mine && cid !== activeId
+        // the open chat counts too while the tab is hidden, it's marked read on return
+        const bump = !mine && (cid !== activeId || document.visibilityState !== 'visible')
         const updated = {
           ...c,
           lastMessageAt: m.createdAt,
