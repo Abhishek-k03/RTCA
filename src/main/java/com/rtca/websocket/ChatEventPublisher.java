@@ -6,6 +6,8 @@ import com.rtca.conversation.MemberRemovedEvent;
 import com.rtca.message.MessageCreatedEvent;
 import com.rtca.message.MessageDeletedEvent;
 import com.rtca.message.MessageEditedEvent;
+import com.rtca.message.ReactionsChangedEvent;
+import com.rtca.message.dto.Reaction;
 import com.rtca.websocket.ChatEvent.EventType;
 import com.rtca.websocket.relay.RedisEventRelay;
 import com.rtca.websocket.relay.RelayMessage;
@@ -15,6 +17,7 @@ import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 /** All outbound events go through the relay so every instance sees them. Clients only see public ids. */
@@ -40,6 +43,13 @@ public class ChatEventPublisher {
     public void onMessageDeleted(MessageDeletedEvent event) {
         UUID conversation = ids.conversation(event.conversationId());
         toConversation(conversation, ChatEvent.of(EventType.DELETED, new Deleted(conversation, event.messageId())));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onReactionsChanged(ReactionsChangedEvent event) {
+        UUID conversation = ids.conversation(event.conversationId());
+        toConversation(conversation, ChatEvent.of(EventType.REACTION,
+                new Reactions(conversation, event.messageId(), event.reactions())));
     }
 
     // drop the removed user's live subscription on every instance, then tell their clients
@@ -80,5 +90,8 @@ public class ChatEventPublisher {
     }
 
     public record Added(UUID conversationId) {
+    }
+
+    public record Reactions(UUID conversationId, Long messageId, List<Reaction> reactions) {
     }
 }

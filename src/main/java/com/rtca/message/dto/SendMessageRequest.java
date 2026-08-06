@@ -12,6 +12,8 @@ public record SendMessageRequest(
 
         @NotBlank
         @Size(max = 4000)
-        String content
+        String content,
+
+        Long replyToId
 ) {
 }

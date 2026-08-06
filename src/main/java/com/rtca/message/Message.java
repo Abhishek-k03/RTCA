@@ -55,6 +55,11 @@ public class Message {
     @JoinColumn(name = "file_id")
     private StoredFile file;
 
+    /** The message this one quotes. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reply_to_id", updatable = false)
+    private Message replyTo;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 16)
     @Builder.Default

@@ -6,10 +6,13 @@ import com.rtca.common.ids.PublicIds;
 import com.rtca.message.dto.EditMessageRequest;
 import com.rtca.message.dto.MessagePage;
 import com.rtca.message.dto.MessageResponse;
+import com.rtca.message.dto.Reaction;
+import com.rtca.message.dto.ReactionRequest;
 import com.rtca.message.dto.ReceiptRequest;
 import com.rtca.message.dto.SendImageRequest;
 import com.rtca.message.dto.SendMessageRequest;
 import jakarta.validation.Valid;
+import java.util.List;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -22,6 +25,7 @@ import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -37,6 +41,7 @@ public class MessageController {
 
     private final MessageService messageService;
     private final ReceiptService receiptService;
+    private final ReactionService reactionService;
     private final PublicIds ids;
 
     @GetMapping
@@ -71,6 +76,19 @@ public class MessageController {
             case "everyone" -> messageService.deleteForEveryone(me.id(), ids.conversationId(conversationId), messageId);
             default -> throw new BadRequestException("scope must be 'me' or 'everyone'");
         }
+    }
+
+    /** One reaction per member. Returns the message's reactions after the change. */
+    @PutMapping("/{messageId}/reaction")
+    public List<Reaction> react(@AuthenticationPrincipal AuthUser me, @PathVariable UUID conversationId,
+                                @PathVariable Long messageId, @Valid @RequestBody ReactionRequest request) {
+        return reactionService.react(me.id(), ids.conversationId(conversationId), messageId, request.emoji());
+    }
+
+    @DeleteMapping("/{messageId}/reaction")
+    public List<Reaction> unreact(@AuthenticationPrincipal AuthUser me, @PathVariable UUID conversationId,
+                                  @PathVariable Long messageId) {
+        return reactionService.unreact(me.id(), ids.conversationId(conversationId), messageId);
     }
 
     @PostMapping

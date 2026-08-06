@@ -17,6 +17,8 @@ public record SendImageRequest(
         String caption,
 
         @Min(1) @Max(20000) Integer width,
-        @Min(1) @Max(20000) Integer height
+        @Min(1) @Max(20000) Integer height,
+
+        Long replyToId
 ) {
 }

@@ -16,6 +16,7 @@ A backend for a real-time chat application built with Spring Boot. It supports o
 - New direct chats stay out of both lists until the first message
 - Clear chat and delete chat, per user
 - Edit messages and delete them for yourself or for everyone (within 15 minutes)
+- Replies that quote the original message, and emoji reactions (one per member per message)
 - Profiles with display name, bio and profile picture
 - Image messages with an optional caption, only visible to members who can see that message
 - Redis caching, per-user rate limiting, and pub/sub relay for running multiple instances
@@ -110,12 +111,13 @@ All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` head
 | DELETE | `/api/conversations/groups/{id}/members/{userId}` | remove member or leave (the chat stays read-only for them) |
 | PATCH | `/api/conversations/groups/{id}/members/{userId}/role` | change role (owner) |
 | GET | `/api/conversations/{id}/messages?before=&after=&limit=` | history |
-| POST | `/api/conversations/{id}/messages` | `{clientMessageId, content}` send |
-| POST | `/api/conversations/{id}/messages/images` | multipart `file` (up to 10 MB) plus `clientMessageId`, `caption`, `width`, `height`. Send an image |
+| POST | `/api/conversations/{id}/messages` | `{clientMessageId, content, replyToId?}` send |
+| POST | `/api/conversations/{id}/messages/images` | multipart `file` (up to 10 MB) plus `clientMessageId`, `caption`, `width`, `height`, `replyToId`. Send an image |
 | POST | `/api/conversations/{id}/messages/read` | `{messageId}` mark read |
 | PATCH | `/api/conversations/{id}/messages/{messageId}` | `{content}` edit your own message |
 | DELETE | `/api/conversations/{id}/messages/{messageId}?scope=me` | hide a message for yourself (no time limit) |
 | DELETE | `/api/conversations/{id}/messages/{messageId}?scope=everyone` | delete your own message for all members |
+| PUT / DELETE | `/api/conversations/{id}/messages/{messageId}/reaction` | `{emoji}` react (👍 ❤️ 😂 😮 😢 🙏), picking another replaces yours. DELETE takes it back |
 | GET | `/api/files/{id}` | an uploaded image (profile picture or chat image) |
 | GET | `/api/presence?userIds=1,2` | presence status |
 | GET / PATCH | `/api/admin/users` | admin only |
@@ -139,11 +141,11 @@ accept-version:1.2
 
 | Direction | Destination | Payload |
 |---|---|---|
-| send | `/app/conversations.{id}.send` | `{clientMessageId, content}` |
+| send | `/app/conversations.{id}.send` | `{clientMessageId, content, replyToId?}` |
 | send | `/app/conversations.{id}.typing` | `{typing: true/false}` |
 | send | `/app/conversations.{id}.delivered` | `{messageId}` |
 | send | `/app/conversations.{id}.read` | `{messageId}` |
-| subscribe | `/topic/conversations.{id}` | `MESSAGE`, `EDITED`, `DELETED`, `TYPING`, `DELIVERED`, `READ` events (members only) |
+| subscribe | `/topic/conversations.{id}` | `MESSAGE`, `EDITED`, `DELETED`, `REACTION`, `TYPING`, `DELIVERED`, `READ` events (members only) |
 | subscribe | `/topic/presence.{userId}` | `PRESENCE` events |
 | subscribe | `/user/queue/events` | `ACK` for your own sends, `ADDED` / `REMOVED` membership changes |
 | subscribe | `/user/queue/errors` | errors from your frames |
@@ -155,8 +157,9 @@ Every event uses the envelope `{"type": "...", "payload": {...}}`.
 
 - `EDITED {message}`: the full updated message, with `editedAt` set.
 - `DELETED {conversationId, messageId}`: a message was deleted for everyone.
+- `REACTION {conversationId, messageId, reactions}`: the message's full reaction list after a change.
 
-Conversation responses include `lastMessage` (the newest message you can see, for list previews, with its `type`) and `removedAt` when you are no longer a member. Messages include `editedAt`, and `deleted: true` with `content: null` once deleted for everyone. Image messages have `type: IMAGE`, the caption in `content`, and `image {url, width, height}`. Users and participants include `avatarUrl`.
+Conversation responses include `lastMessage` (the newest message you can see, for list previews, with its `type`) and `removedAt` when you are no longer a member. Messages include `editedAt`, and `deleted: true` with `content: null` once deleted for everyone. Image messages have `type: IMAGE`, the caption in `content`, and `image {url, width, height}`. Replies carry `replyTo {id, senderId, senderName, content, type, deleted}`, a short preview of the quoted message that follows its edits and deletes. `reactions` is a list of `{emoji, userIds}`. Users and participants include `avatarUrl`.
 
 ## Design notes
 
@@ -238,6 +241,7 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
   - editing and deleting messages, including the time limit
   - refresh tokens: rotation, parallel refreshes, reuse revoking the session, logout and expiry
   - profiles, profile pictures and image messages: type checks, size limits, access for members, removed members and non-members
+  - replies and reactions: quotes from other chats rejected, one reaction per member, live `REACTION` events
 
 ## Possible improvements
 

@@ -45,6 +45,8 @@ public class MessageService {
     private final ApplicationEventPublisher eventPublisher;
     private final RateLimiter rateLimiter;
     private final FileService fileService;
+    private final ReactionService reactionService;
+    private final ReactionRepository reactionRepository;
 
     /**
      * Idempotent on (sender, clientMessageId). A retried send returns the
@@ -61,7 +63,7 @@ public class MessageService {
         }
 
         var insertedId = messageRepository.insertIfAbsent(
-                conversationId, senderId, content, request.clientMessageId());
+                conversationId, senderId, content, request.clientMessageId(), replyTarget(conversationId, request.replyToId()));
 
         if (insertedId.isEmpty()) {
             return duplicate(findDuplicate(senderId, request.clientMessageId()), conversationId);
@@ -81,10 +83,11 @@ public class MessageService {
             return duplicate(existing.get(), conversationId);
         }
 
+        long replyToId = replyTarget(conversationId, request.replyToId());
         StoredFile file = fileService.store(senderId, FilePurpose.MESSAGE, upload, request.width(), request.height());
         String caption = request.caption() == null ? "" : request.caption().strip();
         var insertedId = messageRepository.insertImageIfAbsent(
-                conversationId, senderId, caption, request.clientMessageId(), file.getId());
+                conversationId, senderId, caption, request.clientMessageId(), file.getId(), replyToId);
 
         if (insertedId.isEmpty()) {
             // a concurrent retry got there first
@@ -92,6 +95,17 @@ public class MessageService {
             return duplicate(findDuplicate(senderId, request.clientMessageId()), conversationId);
         }
         return created(conversationId, insertedId.get());
+    }
+
+    // 0 for no reply, which the insert turns into null
+    private long replyTarget(Long conversationId, Long replyToId) {
+        if (replyToId == null) {
+            return 0;
+        }
+        if (!messageRepository.existsByIdAndConversationId(replyToId, conversationId)) {
+            throw new BadRequestException("Can't reply to that message");
+        }
+        return replyToId;
     }
 
     private Message findDuplicate(Long senderId, String clientMessageId) {
@@ -129,7 +143,7 @@ public class MessageService {
             throw new BadRequestException("Message must not be blank");
         }
         message.edit(newContent);
-        MessageResponse response = MessageResponse.from(message);
+        MessageResponse response = MessageResponse.from(message, reactionService.forMessage(messageId));
         eventPublisher.publishEvent(new MessageEditedEvent(response));
         return response;
     }
@@ -139,6 +153,7 @@ public class MessageService {
         Message message = ownMessage(userId, conversationId, messageId, properties.deleteWindow(), "delete");
         StoredFile file = message.getFile();
         message.delete();
+        reactionRepository.removeAll(messageId);
         if (file != null) {
             fileService.deleteAfterCommit(file.getId());
         }
@@ -215,7 +230,11 @@ public class MessageService {
         }
 
         boolean hasMore = rows.size() > size;
-        List<MessageResponse> items = rows.stream().limit(size).map(MessageResponse::from).toList();
+        List<Message> shown = rows.stream().limit(size).toList();
+        var reactions = reactionService.forMessages(shown.stream().map(Message::getId).toList());
+        List<MessageResponse> items = shown.stream()
+                .map(m -> MessageResponse.from(m, reactions.getOrDefault(m.getId(), List.of())))
+                .toList();
         Long nextCursor = items.isEmpty() ? null : items.getLast().id();
         return new MessagePage(items, nextCursor, hasMore);
     }

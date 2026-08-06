@@ -15,18 +15,18 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
 
     boolean existsByIdAndConversationId(Long id, Long conversationId);
 
-    @Query("select m from Message m join fetch m.sender left join fetch m.file where m.id = :id")
+    @Query("select m from Message m join fetch m.sender left join fetch m.file left join fetch m.replyTo r left join fetch r.sender where m.id = :id")
     Optional<Message> findWithSender(@Param("id") Long id);
 
     @Query("""
-            select m from Message m join fetch m.sender left join fetch m.file
+            select m from Message m join fetch m.sender left join fetch m.file left join fetch m.replyTo r left join fetch r.sender
             where m.sender.id = :senderId and m.clientMessageId = :clientMessageId
             """)
     Optional<Message> findByClientId(@Param("senderId") Long senderId,
                                      @Param("clientMessageId") String clientMessageId);
 
     @Query("""
-            select m from Message m join fetch m.sender left join fetch m.file
+            select m from Message m join fetch m.sender left join fetch m.file left join fetch m.replyTo r left join fetch r.sender
             where m.conversationId = :conversationId and m.id > :minId and m.id <= :maxId
               and not exists (select 1 from MessageHide h where h.id.messageId = m.id and h.id.userId = :userId)
             order by m.id desc
@@ -35,7 +35,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                              @Param("minId") Long minId, @Param("maxId") Long maxId, Pageable pageable);
 
     @Query("""
-            select m from Message m join fetch m.sender left join fetch m.file
+            select m from Message m join fetch m.sender left join fetch m.file left join fetch m.replyTo r left join fetch r.sender
             where m.conversationId = :conversationId and m.id < :before and m.id > :minId and m.id <= :maxId
               and not exists (select 1 from MessageHide h where h.id.messageId = m.id and h.id.userId = :userId)
             order by m.id desc
@@ -45,7 +45,7 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                              Pageable pageable);
 
     @Query("""
-            select m from Message m join fetch m.sender left join fetch m.file
+            select m from Message m join fetch m.sender left join fetch m.file left join fetch m.replyTo r left join fetch r.sender
             where m.conversationId = :conversationId and m.id > :after and m.id > :minId and m.id <= :maxId
               and not exists (select 1 from MessageHide h where h.id.messageId = m.id and h.id.userId = :userId)
             order by m.id asc
@@ -109,22 +109,23 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
     List<Object[]> countUnread(@Param("userId") Long userId,
                                @Param("conversationIds") Collection<Long> conversationIds);
 
-    /** Empty result means this (sender, clientMessageId) was already stored. */
+    /** Empty result means this (sender, clientMessageId) was already stored. replyToId 0 means none. */
     @Query(nativeQuery = true, value = """
-            insert into messages (conversation_id, sender_id, content, type, client_message_id, created_at)
-            values (:conversationId, :senderId, :content, 'TEXT', :clientMessageId, now())
+            insert into messages (conversation_id, sender_id, content, type, client_message_id, reply_to_id, created_at)
+            values (:conversationId, :senderId, :content, 'TEXT', :clientMessageId, nullif(:replyToId, 0), now())
             on conflict (sender_id, client_message_id) do nothing
             returning id
             """)
     Optional<Long> insertIfAbsent(@Param("conversationId") Long conversationId,
                                   @Param("senderId") Long senderId,
                                   @Param("content") String content,
-                                  @Param("clientMessageId") String clientMessageId);
+                                  @Param("clientMessageId") String clientMessageId,
+                                  @Param("replyToId") long replyToId);
 
     /** Same as insertIfAbsent, for an image with an optional caption. */
     @Query(nativeQuery = true, value = """
-            insert into messages (conversation_id, sender_id, content, type, client_message_id, file_id, created_at)
-            values (:conversationId, :senderId, :content, 'IMAGE', :clientMessageId, :fileId, now())
+            insert into messages (conversation_id, sender_id, content, type, client_message_id, file_id, reply_to_id, created_at)
+            values (:conversationId, :senderId, :content, 'IMAGE', :clientMessageId, :fileId, nullif(:replyToId, 0), now())
             on conflict (sender_id, client_message_id) do nothing
             returning id
             """)
@@ -132,5 +133,6 @@ public interface MessageRepository extends JpaRepository<Message, Long> {
                                        @Param("senderId") Long senderId,
                                        @Param("content") String content,
                                        @Param("clientMessageId") String clientMessageId,
-                                       @Param("fileId") UUID fileId);
+                                       @Param("fileId") UUID fileId,
+                                       @Param("replyToId") long replyToId);
 }
