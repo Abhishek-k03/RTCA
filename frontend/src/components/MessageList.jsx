@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, CheckCheck, Copy, Image as ImageIcon, Pencil, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, CheckCheck, Copy, CornerUpLeft, Image as ImageIcon, Pencil, RotateCcw, SmilePlus, Trash2 } from 'lucide-react'
 import { useFileUrl } from '../api/files'
-import { dateHeading, formatClock, sameDay, withinWindow } from '../lib'
+import { REACTIONS, dateHeading, formatClock, previewText, sameDay, withinWindow } from '../lib'
 import ImageViewer from './ImageViewer'
 
 const GROUP_GAP_MS = 5 * 60 * 1000
@@ -44,32 +44,51 @@ function Receipt({ status }) {
   return null
 }
 
-function Toolbar({ m, mine, readOnly, onEdit, onDelete, align }) {
-  const [menu, setMenu] = useState(false)
+function Toolbar({ m, mine, readOnly, onEdit, onDelete, onReply, onReact, align }) {
+  // null, 'react' or 'delete'
+  const [menu, setMenu] = useState(null)
   const canChange = mine && !readOnly && !m.deleted && !m.pending && withinWindow(m.createdAt)
   const canEdit = canChange && m.type !== 'IMAGE'
 
   useEffect(() => {
     if (!menu) return
-    const close = () => setMenu(false)
+    const close = () => setMenu(null)
     window.addEventListener('click', close)
     return () => window.removeEventListener('click', close)
   }, [menu])
 
   if (m.pending || m.deleted) return null
   const btn = 'inline-flex size-7 items-center justify-center rounded-[6px] text-ink-2 transition-colors hover:bg-outgoing hover:text-ink'
+  const open = (name) => (e) => {
+    e.stopPropagation()
+    setMenu(menu === name ? null : name)
+  }
+  const popover = `absolute top-8 border border-hairline bg-elevated shadow-[0_2px_8px_rgba(28,27,25,0.06)] ${mine ? 'right-0' : 'left-0'}`
 
   return (
     <div className={`absolute -top-6 z-10 flex translate-y-0.5 items-center gap-0.5 rounded-[8px] border border-hairline bg-elevated p-0.5 opacity-0 shadow-[0_1px_2px_rgba(28,27,25,0.05)] transition duration-150 group-hover:translate-y-0 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:opacity-100 ${menu ? 'translate-y-0 opacity-100' : ''} ${align}`}>
+      {!readOnly && <button className={btn} title="Reply" onClick={() => onReply(m)}><CornerUpLeft size={14} /></button>}
+      {!readOnly && (
+        <div className="relative">
+          <button className={btn} title="React" onClick={open('react')}><SmilePlus size={14} /></button>
+          {menu === 'react' && (
+            <div className={`${popover} flex gap-0.5 rounded-full p-1`}>
+              {REACTIONS.map((emoji) => (
+                <button key={emoji} title={`React ${emoji}`} onClick={() => onReact(m, emoji)}
+                  className="inline-flex size-8 items-center justify-center rounded-full text-[17px] transition-transform duration-150 hover:scale-125 hover:bg-outgoing">
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
       {m.content && <button className={btn} title="Copy" onClick={() => navigator.clipboard?.writeText(m.content)}><Copy size={14} /></button>}
       {canEdit && <button className={btn} title="Edit" onClick={() => onEdit(m)}><Pencil size={14} /></button>}
       <div className="relative">
-        <button className={btn} title="Delete" onClick={(e) => {
-          e.stopPropagation()
-          setMenu(!menu)
-        }}><Trash2 size={14} /></button>
-        {menu && (
-          <div className={`absolute top-8 flex w-44 flex-col rounded-[8px] border border-hairline bg-elevated py-1 text-sm shadow-[0_2px_8px_rgba(28,27,25,0.06)] ${mine ? 'right-0' : 'left-0'}`}>
+        <button className={btn} title="Delete" onClick={open('delete')}><Trash2 size={14} /></button>
+        {menu === 'delete' && (
+          <div className={`${popover} flex w-44 flex-col rounded-[8px] py-1 text-sm`}>
             <button className="px-3 py-1.5 text-left text-ink hover:bg-outgoing" onClick={() => onDelete(m, 'me')}>Delete for me</button>
             {canChange && (
               <button className="px-3 py-1.5 text-left text-danger hover:bg-outgoing" onClick={() => onDelete(m, 'everyone')}>
@@ -98,13 +117,51 @@ function Photo({ image, onOpen }) {
   )
 }
 
-function Body({ m, mine, onOpenImage }) {
+// the message this one replies to. clicking it jumps there if it's loaded
+function Quote({ reply, nameOf, onJump, className = '' }) {
+  return (
+    <button type="button" onClick={() => onJump(reply.id)}
+      className={`mb-1.5 block max-w-full border-l-2 border-accent/70 pl-2.5 text-left ${className}`}>
+      <span className="block truncate text-[12px] font-medium text-accent">
+        {nameOf(reply.senderId, { senderUsername: reply.senderName })}
+      </span>
+      <span className={`block truncate text-[13px] ${reply.deleted ? 'text-ink-3 italic' : 'text-ink-2'}`}>{previewText(reply)}</span>
+    </button>
+  )
+}
+
+function Reactions({ m, meId, readOnly, nameOf, onReact, className = '' }) {
+  if (!m.reactions?.length || m.deleted) return null
+  return (
+    <div className={`mt-2 flex flex-wrap gap-1 ${className}`}>
+      {m.reactions.map((r) => {
+        const picked = r.userIds.includes(meId)
+        const who = r.userIds.map((u) => (u === meId ? 'You' : nameOf(u, {}) ?? 'Someone')).join(', ')
+        return (
+          <button key={r.emoji} type="button" title={who} disabled={readOnly} onClick={() => onReact(m, r.emoji)}
+            className={`inline-flex items-center gap-1 rounded-full border px-1.5 text-[13px] leading-6 transition-colors ${picked
+              ? 'border-accent/50 bg-accent/10 text-ink'
+              : 'border-hairline bg-elevated text-ink-2 enabled:hover:border-ink-3'}`}>
+            <span>{r.emoji}</span>
+            <span className="font-mono text-[11px]">{r.userIds.length}</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function Body({ m, mine, nameOf, onOpenImage, onJump }) {
   if (m.deleted) {
     return <p className="text-[14px] text-ink-3 italic">{mine ? 'You deleted this message.' : 'This message was deleted.'}</p>
   }
+  const quote = m.replyTo && (
+    <Quote reply={m.replyTo} nameOf={nameOf} onJump={onJump} className={m.image && mine ? 'mx-1 mt-1' : ''} />
+  )
   if (m.type === 'IMAGE' && m.image) {
     return (
       <>
+        {quote}
         <Photo image={m.image} onOpen={onOpenImage} />
         {m.content && (
           <p className={`max-w-[360px] text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink ${mine ? 'px-2.5 pt-2 pb-1' : 'pt-2'}`}>
@@ -115,14 +172,17 @@ function Body({ m, mine, onOpenImage }) {
     )
   }
   return (
-    <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink">
-      {m.content}
-      {m.editedAt && <span className="ml-2 align-baseline text-[11px] text-ink-3">edited</span>}
-    </p>
+    <>
+      {quote}
+      <p className="text-[15px] leading-relaxed break-words whitespace-pre-wrap text-ink">
+        {m.content}
+        {m.editedAt && <span className="ml-2 align-baseline text-[11px] text-ink-3">edited</span>}
+      </p>
+    </>
   )
 }
 
-function Group({ group, meId, showName, readOnly, nameOf, status, onRetry, onEdit, onDelete, onOpenImage }) {
+function Group({ group, meId, showName, readOnly, nameOf, status, flash, onRetry, onEdit, onDelete, onReply, onReact, onOpenImage, onJump }) {
   const mine = group.senderId === meId
   const last = group.items.at(-1)
 
@@ -135,12 +195,15 @@ function Group({ group, meId, showName, readOnly, nameOf, status, onRetry, onEdi
       {!mine && showName && <p className="mb-2 text-[13px] font-medium text-ink-2">{nameOf(group.senderId, last)}</p>}
       <div className={`flex w-full flex-col gap-1.5 ${mine ? 'items-end' : 'items-start'}`}>
         {group.items.map((m) => (
-          <div key={m.id ?? m.clientMessageId} tabIndex={0}
-            className={`group animate-rise relative max-w-[82%] outline-none md:max-w-[70%] ${mine
-              ? `rounded-[10px] ${m.image && !m.deleted ? 'p-1.5' : 'px-4 py-2.5'} ${m.deleted ? 'border border-dashed border-hairline' : 'bg-outgoing'}`
-              : 'py-0.5'} ${m.pending ? 'opacity-70' : ''}`}>
-            <Toolbar m={m} mine={mine} readOnly={readOnly} onEdit={onEdit} onDelete={onDelete} align={mine ? 'right-2' : 'left-0'} />
-            <Body m={m} mine={mine} onOpenImage={onOpenImage} />
+          <div key={m.id ?? m.clientMessageId} tabIndex={0} data-mid={m.id}
+            className={`group animate-rise relative max-w-[82%] rounded-[10px] outline-none transition-shadow duration-500 md:max-w-[70%] ${mine
+              ? `${m.image && !m.deleted ? 'p-1.5' : 'px-4 py-2.5'} ${m.deleted ? 'border border-dashed border-hairline' : 'bg-outgoing'}`
+              : 'py-0.5'} ${m.pending ? 'opacity-70' : ''} ${flash === m.id ? 'ring-2 ring-accent/40 ring-offset-4 ring-offset-surface' : ''}`}>
+            <Toolbar m={m} mine={mine} readOnly={readOnly} onEdit={onEdit} onDelete={onDelete} onReply={onReply} onReact={onReact}
+              align={mine ? 'right-2' : 'left-0'} />
+            <Body m={m} mine={mine} nameOf={nameOf} onOpenImage={onOpenImage} onJump={onJump} />
+            <Reactions m={m} meId={meId} readOnly={readOnly} nameOf={nameOf} onReact={onReact}
+              className={m.image && mine ? 'px-1 pb-0.5' : ''} />
             {m.pending && (
               <button className={`meta mt-1 inline-flex items-center gap-1 hover:text-accent ${m.image ? 'px-2.5 pb-1' : ''}`} onClick={() => onRetry(m)}>
                 <RotateCcw size={11} /> retry
@@ -157,9 +220,21 @@ function Group({ group, meId, showName, readOnly, nameOf, status, onRetry, onEdi
   )
 }
 
-export default function MessageList({ messages, meId, isGroup, readOnly, nameOf, status, onRetry, onEdit, onDelete, hasMore, onLoadOlder }) {
+export default function MessageList({ messages, meId, isGroup, readOnly, nameOf, status, onRetry, onEdit, onDelete, onReply, onReact, hasMore, onLoadOlder }) {
   const ref = useRef(null)
   const [viewing, setViewing] = useState(null)
+  const [flash, setFlash] = useState(null)
+  const flashTimer = useRef(null)
+  useEffect(() => () => clearTimeout(flashTimer.current), [])
+
+  const jumpTo = (messageId) => {
+    const el = ref.current?.querySelector(`[data-mid="${messageId}"]`)
+    if (!el) return
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    setFlash(messageId)
+    clearTimeout(flashTimer.current)
+    flashTimer.current = setTimeout(() => setFlash(null), 1600)
+  }
   const last = messages.at(-1)
   const lastKey = last ? last.id ?? last.clientMessageId : null
 
@@ -191,8 +266,9 @@ export default function MessageList({ messages, meId, isGroup, readOnly, nameOf,
           return (
             <div key={first.id ?? first.clientMessageId} className="flex flex-col">
               {newDay && <DateSeparator iso={first.createdAt} />}
-              <Group group={g} meId={meId} showName={isGroup} readOnly={readOnly} nameOf={nameOf} status={status}
-                onRetry={onRetry} onEdit={onEdit} onDelete={onDelete} onOpenImage={setViewing} />
+              <Group group={g} meId={meId} showName={isGroup} readOnly={readOnly} nameOf={nameOf} status={status} flash={flash}
+                onRetry={onRetry} onEdit={onEdit} onDelete={onDelete} onReply={onReply} onReact={onReact}
+                onOpenImage={setViewing} onJump={jumpTo} />
             </div>
           )
         })}

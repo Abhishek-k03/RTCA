@@ -39,10 +39,12 @@ export const api = {
 
   messages: (id, { before, after, limit } = {}) =>
     request('GET', `/api/conversations/${id}/messages${qs({ before, after, limit })}`),
-  sendMessage: (id, clientMessageId, content) =>
-    request('POST', `/api/conversations/${id}/messages`, { clientMessageId, content }),
-  sendImage: (id, clientMessageId, blob, caption, width, height) =>
-    upload('POST', `/api/conversations/${id}/messages/images`, form({ file: blob, clientMessageId, caption, width, height })),
+  sendMessage: (id, clientMessageId, content, replyToId) =>
+    request('POST', `/api/conversations/${id}/messages`, { clientMessageId, content, replyToId }),
+  sendImage: (id, clientMessageId, blob, caption, width, height, replyToId) =>
+    upload('POST', `/api/conversations/${id}/messages/images`, form({ file: blob, clientMessageId, caption, width, height, replyToId })),
+  react: (id, messageId, emoji) => request('PUT', `/api/conversations/${id}/messages/${messageId}/reaction`, { emoji }),
+  unreact: (id, messageId) => request('DELETE', `/api/conversations/${id}/messages/${messageId}/reaction`),
   editMessage: (id, messageId, content) =>
     request('PATCH', `/api/conversations/${id}/messages/${messageId}`, { content }),
   // scope: 'me' | 'everyone'

@@ -7,7 +7,7 @@ import { useStomp, useTopic } from '../ws/StompContext'
 import { usePresence } from '../ws/usePresence'
 import { primeFileUrl } from '../api/files'
 import { prepareImage } from '../image'
-import { conversationTitle, displayName } from '../lib'
+import { conversationTitle, displayName, previewText } from '../lib'
 import ConfirmButton from './ConfirmButton'
 import ContextPanel from './ContextPanel'
 import MessageInput from './MessageInput'
@@ -32,8 +32,16 @@ const advance = (conv, userId, field, messageId) => conv && {
     p.userId === userId ? { ...p, [field]: Math.max(p[field] ?? 0, messageId) } : p),
 }
 
-const markDeleted = (list, messageId) =>
-  list.map((m) => (m.id === messageId ? { ...m, deleted: true, content: null } : m))
+// quotes of a message follow its edits and deletes
+const updateQuotes = (list, messageId, patch) =>
+  list.map((m) => (m.replyTo?.id === messageId ? { ...m, replyTo: { ...m.replyTo, ...patch } } : m))
+
+const markDeleted = (list, messageId) => updateQuotes(
+  list.map((m) => (m.id === messageId ? { ...m, deleted: true, content: null, reactions: [] } : m)),
+  messageId, { deleted: true, content: null })
+
+const setReactions = (list, messageId, reactions) =>
+  list.map((m) => (m.id === messageId ? { ...m, reactions } : m))
 
 export default function ChatWindow({ conversationId: id, onRead, onChanged, onDeleted, onRefresh }) {
   const { user } = useAuth()
@@ -45,6 +53,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
   const [typing, setTyping] = useState({})
   const [showInfo, setShowInfo] = useState(false)
   const [editing, setEditing] = useState(null)
+  const [replyingTo, setReplyingTo] = useState(null)
   const [error, setError] = useState(null)
   const typingTimers = useRef({})
   const readUpTo = useRef(0)
@@ -102,10 +111,13 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
       setMessages((l) => upsert(l, { ...p, pending: false }))
       if (p.senderId !== user.id) setUserTyping(p.senderId, null, false)
     } else if (type === 'EDITED') {
-      setMessages((l) => (l.some((m) => m.id === p.id) ? upsert(l, p) : l))
+      setMessages((l) => updateQuotes(l.some((m) => m.id === p.id) ? upsert(l, p) : l, p.id, { content: p.content }))
     } else if (type === 'DELETED') {
       setMessages((l) => markDeleted(l, p.messageId))
       setEditing((e) => (e?.id === p.messageId ? null : e))
+      setReplyingTo((r) => (r?.id === p.messageId ? null : r))
+    } else if (type === 'REACTION') {
+      setMessages((l) => setReactions(l, p.messageId, p.reactions))
     } else if (type === 'TYPING' && p.userId !== user.id) {
       setUserTyping(p.userId, p.username, p.typing)
     } else if (type === 'DELIVERED') {
@@ -120,6 +132,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
       setConv((c) => c && { ...c, removedAt: p.removedAt })
       setTyping({})
       setEditing(null)
+      setReplyingTo(null)
       return
     }
     if (type === 'ADDED' && p.conversationId === id) {
@@ -172,23 +185,35 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     return p ? displayName(p) : m.senderUsername
   }
 
-  const sendRest = (clientMessageId, content) =>
-    api.sendMessage(id, clientMessageId, content)
+  const sendRest = (clientMessageId, content, replyToId) =>
+    api.sendMessage(id, clientMessageId, content, replyToId)
       .then((m) => setMessages((l) => upsert(l, { ...m, pending: false })))
       .catch((err) => pushError(err.message))
 
+  // the reply is taken when sending, so the banner goes away right away
+  const takeReply = () => {
+    const r = replyingTo
+    setReplyingTo(null)
+    if (!r) return { replyToId: undefined, replyTo: null }
+    return {
+      replyToId: r.id,
+      replyTo: { id: r.id, senderId: r.senderId, senderName: nameOf(r.senderId, r), content: r.content, type: r.type, deleted: false },
+    }
+  }
+
   const send = (content) => {
     const clientMessageId = crypto.randomUUID()
+    const { replyToId, replyTo } = takeReply()
     setMessages((l) => [...l, {
-      clientMessageId, content, senderId: user.id, senderUsername: user.username,
+      clientMessageId, content, senderId: user.id, senderUsername: user.username, replyTo,
       type: 'TEXT', createdAt: new Date().toISOString(), pending: true,
     }])
-    if (!publish(`/app/conversations.${id}.send`, { clientMessageId, content })) sendRest(clientMessageId, content)
+    if (!publish(`/app/conversations.${id}.send`, { clientMessageId, content, replyToId })) sendRest(clientMessageId, content, replyToId)
   }
 
   // images always go over rest, the socket only carries json
-  const uploadImage = (clientMessageId, { blob, width, height }, caption) =>
-    api.sendImage(id, clientMessageId, blob, caption, width, height)
+  const uploadImage = (clientMessageId, { blob, width, height }, caption, replyToId) =>
+    api.sendImage(id, clientMessageId, blob, caption, width, height, replyToId)
       .then((m) => {
         adoptLocalImage(m)
         setMessages((l) => upsert(l, { ...m, pending: false, upload: null }))
@@ -205,15 +230,36 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     }
     const clientMessageId = crypto.randomUUID()
     const { blob, width, height } = prepared
+    const { replyToId, replyTo } = takeReply()
     setMessages((l) => [...l, {
-      clientMessageId, content: caption, senderId: user.id, senderUsername: user.username, type: 'IMAGE',
+      clientMessageId, content: caption, senderId: user.id, senderUsername: user.username, type: 'IMAGE', replyTo,
       image: { url: URL.createObjectURL(blob), width, height, local: true }, upload: prepared,
       createdAt: new Date().toISOString(), pending: true,
     }])
-    uploadImage(clientMessageId, prepared, caption)
+    uploadImage(clientMessageId, prepared, caption, replyToId)
   }
 
-  const retry = (m) => (m.upload ? uploadImage(m.clientMessageId, m.upload, m.content) : sendRest(m.clientMessageId, m.content))
+  const retry = (m) => (m.upload
+    ? uploadImage(m.clientMessageId, m.upload, m.content, m.replyTo?.id)
+    : sendRest(m.clientMessageId, m.content, m.replyTo?.id))
+
+  const startReply = (m) => {
+    setEditing(null)
+    setReplyingTo(m)
+  }
+
+  const startEdit = (m) => {
+    setReplyingTo(null)
+    setEditing(m)
+  }
+
+  // the same emoji again takes it back, another one replaces it
+  const react = (m, emoji) => {
+    const current = m.reactions?.find((r) => r.userIds.includes(user.id))?.emoji
+    const call = current === emoji ? api.unreact(id, m.id) : api.react(id, m.id, emoji)
+    call.then((reactions) => setMessages((l) => setReactions(l, m.id, reactions)))
+      .catch((err) => pushError(err.message))
+  }
 
   const saveEdit = (m, content) => {
     setEditing(null)
@@ -224,6 +270,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
 
   const deleteMessage = (m, scope) => {
     if (editing?.id === m.id) setEditing(null)
+    if (replyingTo?.id === m.id) setReplyingTo(null)
     api.deleteMessage(id, m.id, scope).then(() => {
       setMessages((l) => (scope === 'me' ? l.filter((x) => x.id !== m.id) : markDeleted(l, m.id)))
       if (scope === 'me') onRefresh()
@@ -290,7 +337,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
 
         <MessageList messages={messages} meId={user.id} isGroup={isGroup} readOnly={removed} nameOf={nameOf} status={receipt}
           onRetry={retry}
-          onEdit={setEditing} onDelete={deleteMessage}
+          onEdit={startEdit} onDelete={deleteMessage} onReply={startReply} onReact={react}
           hasMore={hasMore} onLoadOlder={loadOlder} />
 
         {removed ? (
@@ -305,7 +352,9 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
         ) : (
           <>
             <TypingIndicator names={Object.values(typing)} />
-            <MessageInput onSend={send} onSendImage={sendImage} editing={editing} onSubmitEdit={saveEdit} onCancelEdit={() => setEditing(null)}
+            <MessageInput onSend={send} onSendImage={sendImage} editing={editing}
+              replyingTo={replyingTo && { id: replyingTo.id, name: nameOf(replyingTo.senderId, replyingTo), text: previewText(replyingTo) }}
+              onCancelReply={() => setReplyingTo(null)} onSubmitEdit={saveEdit} onCancelEdit={() => setEditing(null)}
               onTyping={(t) => publish(`/app/conversations.${id}.typing`, { typing: t })} />
           </>
         )}

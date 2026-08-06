@@ -53,6 +53,16 @@ export function lastSeen(iso) {
   return sameDay(d, new Date()) ? `last seen ${formatClock(iso)}` : `last seen ${shortWhen(iso)}`
 }
 
+// same set the server accepts
+export const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏']
+
+// one line for a quoted message or a reply banner
+export function previewText(m) {
+  if (m.deleted) return 'Deleted message'
+  if (m.type === 'IMAGE') return m.content ? `Photo · ${m.content}` : 'Photo'
+  return m.content
+}
+
 export const EDIT_WINDOW_MS = 15 * 60 * 1000
 
 export const withinWindow = (iso) => Date.now() - new Date(iso).getTime() < EDIT_WINDOW_MS

@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { ArrowUp, ImagePlus, Pencil, X } from 'lucide-react'
+import { ArrowUp, CornerUpLeft, ImagePlus, Pencil, X } from 'lucide-react'
 import { IMAGE_TYPES } from '../image'
 
 // backend drops typing=true repeats within 2s, so refresh just after that
@@ -9,7 +9,7 @@ const MAX_HEIGHT = 200
 
 const firstImage = (files) => [...(files || [])].find((f) => f.type.startsWith('image/'))
 
-export default function MessageInput({ onSend, onSendImage, onTyping, editing, onSubmitEdit, onCancelEdit }) {
+export default function MessageInput({ onSend, onSendImage, onTyping, editing, onSubmitEdit, onCancelEdit, replyingTo, onCancelReply }) {
   const [text, setText] = useState('')
   const [image, setImage] = useState(null)
   const [dragging, setDragging] = useState(false)
@@ -40,9 +40,11 @@ export default function MessageInput({ onSend, onSendImage, onTyping, editing, o
     }
   }
 
+  // focus when a reply or edit starts, not on every render
+  const replyId = replyingTo?.id
   useEffect(() => {
-    if (editing) area.current?.focus()
-  }, [editing])
+    if (editing || replyId) area.current?.focus()
+  }, [editing, replyId])
 
   // the preview url lives as long as the picked image
   useEffect(() => {
@@ -122,6 +124,16 @@ export default function MessageInput({ onSend, onSendImage, onTyping, editing, o
             <button type="button" className="text-ink-3 hover:text-ink" onClick={cancelEdit} title="Cancel edit"><X size={14} /></button>
           </div>
         )}
+        {replyingTo && !editing && (
+          <div className="hairline flex items-center gap-3 border-b px-4 py-2 text-[13px]">
+            <CornerUpLeft size={13} className="shrink-0 text-accent" />
+            <span className="eyebrow shrink-0 text-accent">Reply</span>
+            <span className="min-w-0 flex-1 truncate text-ink-3">
+              <span className="text-ink-2">{replyingTo.name}</span> · {replyingTo.text}
+            </span>
+            <button type="button" className="text-ink-3 hover:text-ink" onClick={onCancelReply} title="Cancel reply"><X size={14} /></button>
+          </div>
+        )}
         {image && (
           <div className="hairline animate-rise flex items-center gap-3 border-b px-4 py-2.5">
             <img src={image.preview} alt="" className="size-12 rounded-[6px] object-cover" />
@@ -156,6 +168,7 @@ export default function MessageInput({ onSend, onSendImage, onTyping, editing, o
               if (e.key === 'Enter' && !e.shiftKey) submit(e)
               if (e.key === 'Escape' && editing) cancelEdit()
               if (e.key === 'Escape' && image) setImage(null)
+              else if (e.key === 'Escape' && replyingTo) onCancelReply()
             }} />
           <button className="group inline-flex size-9 shrink-0 items-center justify-center rounded-[8px] bg-ink text-canvas transition duration-150 hover:bg-accent disabled:bg-hairline disabled:text-ink-3"
             disabled={!text.trim() && !image} title={editing ? 'Save' : 'Send'}>
