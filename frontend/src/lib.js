@@ -6,11 +6,16 @@ export function conversationTitle(c, meId) {
   return other ? displayName(other) : 'Just you'
 }
 
-// direct chats show the other person's photo, groups have none
+// groups have their own photo, direct chats show the other person's
 export function conversationAvatar(c, meId) {
-  if (c.type === 'GROUP') return null
+  if (c.type === 'GROUP') return c.avatarUrl ?? null
   return c.participants.find((p) => p.userId !== meId)?.avatarUrl ?? null
 }
+
+// a PROFILE event: new name or photo for every place that person appears
+export const applyProfile = (participants, u) => participants.map((p) => (p.userId === u.id
+  ? { ...p, username: u.username, displayName: u.displayName, avatarUrl: u.avatarUrl }
+  : p))
 
 export function initials(name = '') {
   const parts = name.trim().split(/\s+/).filter(Boolean)

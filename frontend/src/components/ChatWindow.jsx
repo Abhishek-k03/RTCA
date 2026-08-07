@@ -7,7 +7,7 @@ import { useStomp, useTopic } from '../ws/StompContext'
 import { usePresence } from '../ws/usePresence'
 import { primeFileUrl } from '../api/files'
 import { prepareImage } from '../image'
-import { conversationTitle, displayName, previewText } from '../lib'
+import { applyProfile, conversationTitle, displayName, previewText } from '../lib'
 import ConfirmButton from './ConfirmButton'
 import ContextPanel from './ContextPanel'
 import MessageInput from './MessageInput'
@@ -118,6 +118,8 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
       setReplyingTo((r) => (r?.id === p.messageId ? null : r))
     } else if (type === 'REACTION') {
       setMessages((l) => setReactions(l, p.messageId, p.reactions))
+    } else if (type === 'GROUP_UPDATED') {
+      setConv((c) => c && { ...c, name: p.name, avatarUrl: p.avatarUrl })
     } else if (type === 'TYPING' && p.userId !== user.id) {
       setUserTyping(p.userId, p.username, p.typing)
     } else if (type === 'DELIVERED') {
@@ -128,6 +130,10 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
   })
 
   useTopic('/user/queue/events', ({ type, payload: p }) => {
+    if (type === 'PROFILE') {
+      setConv((c) => c && { ...c, participants: applyProfile(c.participants, p) })
+      return
+    }
     if (type === 'REMOVED' && p.conversationId === id) {
       setConv((c) => c && { ...c, removedAt: p.removedAt })
       setTyping({})

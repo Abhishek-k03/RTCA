@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
 import { X } from 'lucide-react'
 import { api } from '../api/endpoints'
-import { conversationTitle, displayName } from '../lib'
+import { useTopic } from '../ws/StompContext'
+import { conversationAvatar, conversationTitle, displayName } from '../lib'
 import Avatar from './Avatar'
 import ConfirmButton from './ConfirmButton'
 import FormError from './FormError'
+import PhotoPicker from './PhotoPicker'
 import PresenceDot from './PresenceDot'
 import UserSearch from './UserSearch'
 
@@ -32,6 +34,10 @@ export default function ContextPanel({ conversation: c, meId, presence, onChange
       active = false
     }
   }, [otherId])
+
+  useTopic('/user/queue/events', ({ type, payload: p }) => {
+    if (type === 'PROFILE' && p.id === otherId) setBio(p.bio)
+  })
 
   const act = async (fn) => {
     setError(null)
@@ -61,8 +67,16 @@ export default function ContextPanel({ conversation: c, meId, presence, onChange
         <button className="icon-btn -mt-1.5 -mr-2" onClick={onClose} title="Close"><X size={16} /></button>
       </div>
 
-      {other && <div className="mt-8"><Avatar name={displayName(other)} src={other.avatarUrl} size="xl" /></div>}
-      <h2 className={`${other ? 'mt-6' : 'mt-8'} font-serif text-[34px] leading-[1.05] break-words text-ink`}>{conversationTitle(c, meId)}</h2>
+      <div className="mt-8">
+        {isGroup && canManage ? (
+          <PhotoPicker name={c.name} src={c.avatarUrl}
+            onUpload={async (blob) => onChanged(await api.setGroupAvatar(c.id, blob))}
+            onRemove={async () => onChanged(await api.removeGroupAvatar(c.id))} />
+        ) : (
+          <Avatar name={conversationTitle(c, meId)} src={conversationAvatar(c, meId)} size="xl" />
+        )}
+      </div>
+      <h2 className="mt-6 font-serif text-[34px] leading-[1.05] break-words text-ink">{conversationTitle(c, meId)}</h2>
       <div className="mt-3">
         {isGroup
           ? <p className="eyebrow">{c.participants.length} members{removed && ' · read only'}</p>

@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router'
 import { useAuth } from '../auth/AuthContext'
 import { api } from '../api/endpoints'
 import { useStomp, useTopic } from '../ws/StompContext'
-import { dateHeading, displayName } from '../lib'
+import { applyProfile, dateHeading, displayName } from '../lib'
 import { useRecentSearches } from '../recentSearches'
 import { notify } from '../notifications'
 import ChatWindow from '../components/ChatWindow'
@@ -37,7 +37,7 @@ function EmptyState() {
 }
 
 export default function ChatPage() {
-  const { user } = useAuth()
+  const { user, setUser } = useAuth()
   const { connected, subscribe, publish, pushError } = useStomp()
   const { id } = useParams()
   const activeId = id ?? null
@@ -101,6 +101,10 @@ export default function ChatPage() {
           ? { ...c, lastMessage: { ...c.lastMessage, content: m.content } } : c))
         return
       }
+      if (type === 'GROUP_UPDATED') {
+        updateConversation(cid, (c) => ({ ...c, name: m.name, avatarUrl: m.avatarUrl }))
+        return
+      }
       if (type === 'DELETED') {
         updateConversation(cid, (c) => (c.lastMessage?.id === m.messageId
           ? { ...c, lastMessage: { ...c.lastMessage, content: null, deleted: true } } : c))
@@ -134,6 +138,13 @@ export default function ChatPage() {
   // ADDED: new or restored membership. REMOVED: chat turns read-only, and subscribing would be rejected
   useTopic('/user/queue/events', ({ type, payload }) => {
     if (type === 'ADDED') syncDelivered()
+    if (type === 'PROFILE') {
+      setConversations((list) => list.map((c) => ({ ...c, participants: applyProfile(c.participants, payload) })))
+      // our own change, made in another tab
+      if (payload.id === user.id) {
+        setUser((u) => ({ ...u, displayName: payload.displayName, bio: payload.bio, avatarUrl: payload.avatarUrl }))
+      }
+    }
     if (type !== 'REMOVED') return
     updateConversation(payload.conversationId, (c) => ({ ...c, removedAt: payload.removedAt, lastMessageAt: payload.removedAt }))
   })
@@ -152,7 +163,8 @@ export default function ChatPage() {
   }, [])
 
   const onChanged = useCallback((updated) => {
-    setConversations((list) => list.map((c) => (c.id === updated.id ? { ...updated, unreadCount: c.unreadCount } : c)))
+    // single-conversation responses carry no preview, keep the one we have
+    setConversations((list) => list.map((c) => (c.id === updated.id ? { ...c, ...updated, unreadCount: c.unreadCount } : c)))
   }, [])
 
   const onGroupCreated = (c) => {

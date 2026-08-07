@@ -1,11 +1,10 @@
-import { useRef, useState } from 'react'
-import { Camera, Check } from 'lucide-react'
+import { useState } from 'react'
+import { Check } from 'lucide-react'
 import { useAuth } from '../auth/AuthContext'
 import { api } from '../api/endpoints'
-import { IMAGE_TYPES, squareAvatar } from '../image'
-import Avatar from '../components/Avatar'
 import FormError from '../components/FormError'
 import PageShell from '../components/PageShell'
+import PhotoPicker from '../components/PhotoPicker'
 import { dateHeading, displayName } from '../lib'
 
 const BIO_MAX = 200
@@ -16,55 +15,6 @@ const Row = ({ label, children }) => (
     <span className="text-sm text-ink">{children}</span>
   </div>
 )
-
-function PhotoPicker({ user, setUser }) {
-  const input = useRef(null)
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(null)
-
-  const run = async (fn) => {
-    setError(null)
-    setBusy(true)
-    try {
-      setUser(await fn())
-    } catch (err) {
-      setError(err)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const pick = (file) => file && run(async () => api.uploadAvatar(await squareAvatar(file)))
-
-  return (
-    <div className="flex items-center gap-6">
-      <button type="button" className="group relative rounded-full disabled:opacity-60" title="Change photo"
-        disabled={busy} onClick={() => input.current.click()}>
-        <Avatar name={displayName(user)} src={user.avatarUrl} size="xl" />
-        <span className="absolute inset-0 grid place-items-center rounded-full bg-ink/45 text-canvas opacity-0 transition-opacity duration-150 group-hover:opacity-100 group-focus-visible:opacity-100">
-          <Camera size={20} />
-        </span>
-      </button>
-      <div>
-        <p className="text-sm text-ink-2">@{user.username}</p>
-        <div className="mt-2 flex gap-5">
-          <button type="button" className="btn-quiet" disabled={busy} onClick={() => input.current.click()}>
-            {busy ? 'Saving…' : user.avatarUrl ? 'Change photo' : 'Add photo'}
-          </button>
-          {user.avatarUrl && (
-            <button type="button" className="btn-quiet hover:text-danger" disabled={busy}
-              onClick={() => run(api.removeAvatar)}>Remove</button>
-          )}
-        </div>
-        <FormError error={error} />
-      </div>
-      <input ref={input} type="file" accept={IMAGE_TYPES.join(',')} hidden onChange={(e) => {
-        pick(e.target.files[0])
-        e.target.value = ''
-      }} />
-    </div>
-  )
-}
 
 export default function ProfilePage() {
   const { user, setUser } = useAuth()
@@ -98,7 +48,11 @@ export default function ProfilePage() {
 
   return (
     <PageShell eyebrow="Profile" title={displayName(user)}>
-      <PhotoPicker user={user} setUser={setUser} />
+      <PhotoPicker name={displayName(user)} src={user.avatarUrl}
+        onUpload={async (blob) => setUser(await api.uploadAvatar(blob))}
+        onRemove={async () => setUser(await api.removeAvatar())}>
+        <p className="text-sm text-ink-2">@{user.username}</p>
+      </PhotoPicker>
 
       <div className="mt-12">
         <Row label="Email">{user.email}</Row>
