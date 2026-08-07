@@ -56,4 +56,7 @@ public interface ConversationRepository extends JpaRepository<Conversation, Long
             select count(p) from ConversationParticipant p where p.user.id = :userId and p.hidden = false
             """)
     Page<Conversation> findForUser(@Param("userId") Long userId, Pageable pageable);
+
+    @Query("select c.id from Conversation c where c.avatarId = :avatarId")
+    Optional<Long> findIdByAvatarId(@Param("avatarId") UUID avatarId);
 }

@@ -10,6 +10,7 @@ import com.rtca.user.dto.UpdateProfileRequest;
 import com.rtca.user.dto.UserResponse;
 import com.rtca.user.dto.UserSummary;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Pageable;
@@ -25,6 +26,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final FileService fileService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public User getById(Long id) {
@@ -45,7 +47,7 @@ public class UserService {
         if (request.bio() != null) {
             user.setBio(request.bio().isBlank() ? null : request.bio().strip());
         }
-        return UserResponse.from(user);
+        return changed(user);
     }
 
     @CacheEvict(cacheNames = CacheConfig.USERS, key = "#id")
@@ -57,7 +59,7 @@ public class UserService {
         if (previous != null) {
             fileService.deleteAfterCommit(previous);
         }
-        return UserResponse.from(user);
+        return changed(user);
     }
 
     @CacheEvict(cacheNames = CacheConfig.USERS, key = "#id")
@@ -68,6 +70,12 @@ public class UserService {
             fileService.deleteAfterCommit(user.getAvatarId());
             user.setAvatarId(null);
         }
+        return changed(user);
+    }
+
+    // people who share a chat with this user see the new name or photo live
+    private UserResponse changed(User user) {
+        eventPublisher.publishEvent(new ProfileUpdatedEvent(user.getId(), UserSummary.from(user)));
         return UserResponse.from(user);
     }
 

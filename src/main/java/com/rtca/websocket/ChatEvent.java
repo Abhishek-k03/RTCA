@@ -14,7 +14,9 @@ public record ChatEvent(EventType type, Object payload) {
         ADDED,
         EDITED,
         DELETED,
-        REACTION
+        REACTION,
+        GROUP_UPDATED,
+        PROFILE
     }
 
     public static ChatEvent of(EventType type, Object payload) {

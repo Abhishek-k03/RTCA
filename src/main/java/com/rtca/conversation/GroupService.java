@@ -4,17 +4,21 @@ import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.ForbiddenException;
 import com.rtca.common.exception.NotFoundException;
 import com.rtca.conversation.dto.ConversationResponse;
+import com.rtca.file.FilePurpose;
+import com.rtca.file.FileService;
 import com.rtca.message.MessageRepository;
 import com.rtca.user.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -29,6 +33,7 @@ public class GroupService {
     private final MembershipService membershipService;
     private final MessageRepository messageRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final FileService fileService;
 
     @Transactional
     public ConversationResponse create(Long me, String name, Set<Long> requestedMembers) {
@@ -60,6 +65,35 @@ public class GroupService {
         Conversation group = getGroup(groupId);
         membershipService.requireManager(groupId, me);
         group.setName(name.trim());
+        return updated(group);
+    }
+
+    @Transactional
+    public ConversationResponse setAvatar(Long me, Long groupId, MultipartFile upload) {
+        Conversation group = getGroup(groupId);
+        membershipService.requireManager(groupId, me);
+        UUID previous = group.getAvatarId();
+        group.setAvatarId(fileService.store(me, FilePurpose.GROUP_AVATAR, upload, null, null).getId());
+        if (previous != null) {
+            fileService.deleteAfterCommit(previous);
+        }
+        return updated(group);
+    }
+
+    @Transactional
+    public ConversationResponse removeAvatar(Long me, Long groupId) {
+        Conversation group = getGroup(groupId);
+        membershipService.requireManager(groupId, me);
+        if (group.getAvatarId() != null) {
+            fileService.deleteAfterCommit(group.getAvatarId());
+            group.setAvatarId(null);
+        }
+        return updated(group);
+    }
+
+    // members see a rename or new photo live
+    private ConversationResponse updated(Conversation group) {
+        eventPublisher.publishEvent(new GroupUpdatedEvent(group.getId(), group.getName(), group.getAvatarId()));
         return conversationService.toResponse(group);
     }
 

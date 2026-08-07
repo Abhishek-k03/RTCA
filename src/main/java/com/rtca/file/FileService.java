@@ -2,6 +2,7 @@ package com.rtca.file;
 
 import com.rtca.common.exception.BadRequestException;
 import com.rtca.common.exception.NotFoundException;
+import com.rtca.conversation.ConversationRepository;
 import com.rtca.conversation.ParticipantRepository;
 import com.rtca.message.MessageRepository;
 import lombok.RequiredArgsConstructor;
@@ -28,6 +29,7 @@ public class FileService {
     private final FileProperties properties;
     private final MessageRepository messageRepository;
     private final ParticipantRepository participantRepository;
+    private final ConversationRepository conversationRepository;
 
     public record Download(Resource resource, String contentType, long size) {
     }
@@ -38,7 +40,7 @@ public class FileService {
         if (upload == null || upload.isEmpty()) {
             throw new BadRequestException("File is empty");
         }
-        DataSize max = purpose == FilePurpose.AVATAR ? properties.maxAvatarSize() : properties.maxImageSize();
+        DataSize max = purpose == FilePurpose.MESSAGE ? properties.maxImageSize() : properties.maxAvatarSize();
         if (upload.getSize() > max.toBytes()) {
             throw new BadRequestException("File is larger than " + max.toMegabytes() + " MB");
         }
@@ -90,10 +92,16 @@ public class FileService {
         return new Download(storage.load(id).orElseThrow(notFound), file.getContentType(), file.getSizeBytes());
     }
 
-    // avatars are visible to everyone signed in, chat images follow the same rules as history
+    // profile pictures are visible to everyone signed in, group photos to members (removed ones too),
+    // chat images follow the same rules as history
     private boolean canView(Long viewerId, StoredFile file) {
         if (file.getPurpose() == FilePurpose.AVATAR) {
             return true;
+        }
+        if (file.getPurpose() == FilePurpose.GROUP_AVATAR) {
+            return conversationRepository.findIdByAvatarId(file.getId())
+                    .flatMap(id -> participantRepository.findByConversationIdAndUserId(id, viewerId))
+                    .isPresent();
         }
         return messageRepository.findByFileId(file.getId())
                 .filter(m -> !m.isDeleted() && !messageRepository.isHidden(viewerId, m.getId()))

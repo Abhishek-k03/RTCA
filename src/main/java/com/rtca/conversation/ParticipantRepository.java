@@ -45,6 +45,14 @@ public interface ParticipantRepository extends JpaRepository<ConversationPartici
             """)
     List<Long> findUserIds(@Param("conversationId") Long conversationId);
 
+    /** Everyone who shares a chat with this user that both can see, the user included. */
+    @Query("""
+            select distinct other.user.id from ConversationParticipant mine, ConversationParticipant other
+            where mine.user.id = :userId and other.conversation = mine.conversation
+              and mine.hidden = false and other.hidden = false
+            """)
+    List<Long> findContactIds(@Param("userId") Long userId);
+
     @Query("select p.user.id from ConversationParticipant p where p.conversation.id = :conversationId and p.hidden = true")
     List<Long> findHiddenUserIds(@Param("conversationId") Long conversationId);
 

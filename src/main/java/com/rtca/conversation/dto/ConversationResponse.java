@@ -3,6 +3,7 @@ package com.rtca.conversation.dto;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.rtca.conversation.Conversation;
 import com.rtca.conversation.ConversationType;
+import com.rtca.file.FileUrls;
 
 import java.time.Instant;
 import java.util.List;
@@ -12,6 +13,8 @@ public record ConversationResponse(
         UUID id,
         ConversationType type,
         String name,
+        // group photo, direct chats use the other person's
+        String avatarUrl,
         List<ParticipantResponse> participants,
         Instant createdAt,
         Instant lastMessageAt,
@@ -34,6 +37,7 @@ public record ConversationResponse(
                 c.getPublicId(),
                 c.getType(),
                 c.getName(),
+                FileUrls.of(c.getAvatarId()),
                 participants,
                 c.getCreatedAt(),
                 // removed viewers don't get to see later activity

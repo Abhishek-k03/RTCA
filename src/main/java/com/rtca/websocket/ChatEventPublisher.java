@@ -1,13 +1,17 @@
 package com.rtca.websocket;
 
 import com.rtca.common.ids.PublicIds;
+import com.rtca.conversation.GroupUpdatedEvent;
 import com.rtca.conversation.MemberAddedEvent;
 import com.rtca.conversation.MemberRemovedEvent;
+import com.rtca.conversation.ParticipantRepository;
+import com.rtca.file.FileUrls;
 import com.rtca.message.MessageCreatedEvent;
 import com.rtca.message.MessageDeletedEvent;
 import com.rtca.message.MessageEditedEvent;
 import com.rtca.message.ReactionsChangedEvent;
 import com.rtca.message.dto.Reaction;
+import com.rtca.user.ProfileUpdatedEvent;
 import com.rtca.websocket.ChatEvent.EventType;
 import com.rtca.websocket.relay.RedisEventRelay;
 import com.rtca.websocket.relay.RelayMessage;
@@ -27,6 +31,7 @@ public class ChatEventPublisher {
 
     private final RedisEventRelay relay;
     private final PublicIds ids;
+    private final ParticipantRepository participantRepository;
 
     // after commit so clients never see a message that was rolled back
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -50,6 +55,20 @@ public class ChatEventPublisher {
         UUID conversation = ids.conversation(event.conversationId());
         toConversation(conversation, ChatEvent.of(EventType.REACTION,
                 new Reactions(conversation, event.messageId(), event.reactions())));
+    }
+
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onGroupUpdated(GroupUpdatedEvent event) {
+        UUID conversation = ids.conversation(event.conversationId());
+        toConversation(conversation, ChatEvent.of(EventType.GROUP_UPDATED,
+                new GroupUpdated(conversation, event.name(), FileUrls.of(event.avatarId()))));
+    }
+
+    // to everyone who shares a chat with them, the user's other tabs included
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    public void onProfileUpdated(ProfileUpdatedEvent event) {
+        ChatEvent profile = ChatEvent.of(EventType.PROFILE, event.user());
+        participantRepository.findContactIds(event.userId()).forEach(id -> toUser(id, profile));
     }
 
     // drop the removed user's live subscription on every instance, then tell their clients
@@ -93,5 +112,8 @@ public class ChatEventPublisher {
     }
 
     public record Reactions(UUID conversationId, Long messageId, List<Reaction> reactions) {
+    }
+
+    public record GroupUpdated(UUID conversationId, String name, String avatarUrl) {
     }
 }

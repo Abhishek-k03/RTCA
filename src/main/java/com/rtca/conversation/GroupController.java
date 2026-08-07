@@ -11,15 +11,19 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 @RestController
 @RequestMapping("/api/conversations/groups")
@@ -40,6 +44,17 @@ public class GroupController {
     public ConversationResponse rename(@AuthenticationPrincipal AuthUser me, @PathVariable UUID id,
                                        @Valid @RequestBody UpdateGroupRequest request) {
         return groupService.rename(me.id(), ids.conversationId(id), request.name());
+    }
+
+    @PutMapping(path = "/{id}/avatar", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ConversationResponse setAvatar(@AuthenticationPrincipal AuthUser me, @PathVariable UUID id,
+                                          @RequestPart("file") MultipartFile file) {
+        return groupService.setAvatar(me.id(), ids.conversationId(id), file);
+    }
+
+    @DeleteMapping("/{id}/avatar")
+    public ConversationResponse removeAvatar(@AuthenticationPrincipal AuthUser me, @PathVariable UUID id) {
+        return groupService.removeAvatar(me.id(), ids.conversationId(id));
     }
 
     @PostMapping("/{id}/members")

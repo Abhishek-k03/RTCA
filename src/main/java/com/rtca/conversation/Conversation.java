@@ -38,6 +38,10 @@ public class Conversation extends BaseEntity {
     @Column(length = 100)
     private String name;
 
+    /** Group photo. */
+    @Column(name = "avatar_id")
+    private UUID avatarId;
+
     /** "minUserId:maxUserId" for direct chats, null for groups. */
     @Column(name = "direct_key", unique = true, length = 64)
     private String directKey;
