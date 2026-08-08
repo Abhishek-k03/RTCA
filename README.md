@@ -1,5 +1,7 @@
 # Real Time Chat App
 
+[![CI](https://github.com/Abhishek-k03/RTCA/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-k03/RTCA/actions/workflows/ci.yml)
+
 A backend for a real-time chat application built with Spring Boot. It supports one-to-one and group chats over WebSockets (STOMP), stores messages in PostgreSQL, and uses Redis for presence, caching, rate limiting and cross-instance fan-out.
 
 ## Features
@@ -229,6 +231,8 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
 ```bash
 ./mvnw verify
 ```
+
+GitHub Actions runs the backend tests and the frontend lint and build on every push to `master` and on pull requests.
 
 - Unit tests cover the auth service and JWT handling. MockMvc tests cover the auth endpoints, the refresh cookie and error mapping.
 - Integration tests use Testcontainers for real Postgres and Redis (Docker required). They cover:
