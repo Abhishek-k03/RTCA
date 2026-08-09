@@ -97,6 +97,11 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
 
   const removed = !!conv?.removedAt
 
+  const nameOf = (userId, m) => {
+    const p = conv?.participants.find((x) => x.userId === userId)
+    return p ? displayName(p) : m.senderUsername
+  }
+
   // removed members get no live events, the server would reject the subscribe
   // our own photo: keep showing the local copy instead of downloading it again
   const adoptLocalImage = (m) => {
@@ -121,7 +126,7 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     } else if (type === 'GROUP_UPDATED') {
       setConv((c) => c && { ...c, name: p.name, avatarUrl: p.avatarUrl })
     } else if (type === 'TYPING' && p.userId !== user.id) {
-      setUserTyping(p.userId, p.username, p.typing)
+      setUserTyping(p.userId, nameOf(p.userId, { senderUsername: p.username }), p.typing)
     } else if (type === 'DELIVERED') {
       setConv((c) => advance(c, p.userId, 'lastDeliveredMessageId', p.messageId))
     } else if (type === 'READ') {
@@ -184,11 +189,6 @@ export default function ChatWindow({ conversationId: id, onRead, onChanged, onDe
     if (others.every((p) => (p.lastReadMessageId ?? 0) >= m.id)) return 'read'
     if (others.every((p) => Math.max(p.lastDeliveredMessageId ?? 0, p.lastReadMessageId ?? 0) >= m.id)) return 'delivered'
     return 'sent'
-  }
-
-  const nameOf = (userId, m) => {
-    const p = conv?.participants.find((x) => x.userId === userId)
-    return p ? displayName(p) : m.senderUsername
   }
 
   const sendRest = (clientMessageId, content, replyToId) =>
