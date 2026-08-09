@@ -4,6 +4,26 @@
 
 A backend for a real-time chat application built with Spring Boot. It supports one-to-one and group chats over WebSockets (STOMP), stores messages in PostgreSQL, and uses Redis for presence, caching, rate limiting and cross-instance fan-out.
 
+## Screenshots
+
+The React frontend in [`frontend/`](frontend) talks to this backend over REST and STOMP.
+
+A direct chat: a photo with a caption, a reply quoting it, reactions, an edited message and the other person typing.
+
+![Direct chat with a photo, a reply quoting it, reactions and a typing indicator](docs/screenshots/chat.jpg)
+
+A group in dark mode, with the details panel open: group photo, members and roles.
+
+![Group chat in dark mode with the details panel showing the group photo and members](docs/screenshots/group-dark.jpg)
+
+On a phone, and the profile page with photo and bio.
+
+<p align="center">
+  <img src="docs/screenshots/mobile-list.jpg" height="420" alt="Conversation list on a phone">
+  <img src="docs/screenshots/mobile-chat.jpg" height="420" alt="A chat on a phone">
+  <img src="docs/screenshots/profile.jpg" height="420" alt="Profile page with photo, display name and bio">
+</p>
+
 ## Features
 
 - Registration and login with short-lived JWTs and rotating refresh tokens, plus role-based access (`USER`, `ADMIN`)
