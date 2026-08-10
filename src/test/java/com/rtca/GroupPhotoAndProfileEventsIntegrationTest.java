@@ -4,8 +4,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.rtca.conversation.dto.ConversationResponse;
 import com.rtca.message.dto.MessageResponse;
 import com.rtca.support.IntegrationTest;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
@@ -13,27 +11,16 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
-import org.springframework.lang.NonNull;
-import org.springframework.messaging.converter.MappingJackson2MessageConverter;
-import org.springframework.messaging.simp.stomp.StompFrameHandler;
-import org.springframework.messaging.simp.stomp.StompHeaders;
 import org.springframework.messaging.simp.stomp.StompSession;
-import org.springframework.messaging.simp.stomp.StompSessionHandlerAdapter;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.socket.WebSocketHttpHeaders;
-import org.springframework.web.socket.client.standard.StandardWebSocketClient;
-import org.springframework.web.socket.messaging.WebSocketStompClient;
 
-import java.lang.reflect.Type;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.http.HttpMethod.DELETE;
@@ -46,19 +33,6 @@ class GroupPhotoAndProfileEventsIntegrationTest extends IntegrationTest {
 
     private static final byte[] PNG = Base64.getDecoder().decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==");
-
-    private WebSocketStompClient stompClient;
-
-    @BeforeEach
-    void setUp() {
-        stompClient = new WebSocketStompClient(new StandardWebSocketClient());
-        stompClient.setMessageConverter(new MappingJackson2MessageConverter());
-    }
-
-    @AfterEach
-    void tearDown() {
-        stompClient.stop();
-    }
 
     @Test
     void managersSetAGroupPhotoThatOnlyMembersCanSee() throws Exception {
@@ -181,52 +155,5 @@ class GroupPhotoAndProfileEventsIntegrationTest extends IntegrationTest {
     private void send(TestUser as, UUID convId, String content) {
         call(POST, "/api/conversations/" + convId + "/messages", as,
                 Map.of("clientMessageId", UUID.randomUUID().toString(), "content", content), MessageResponse.class);
-    }
-
-    private StompSession connect(String token) throws Exception {
-        StompHeaders headers = new StompHeaders();
-        headers.add("Authorization", "Bearer " + token);
-        return stompClient.connectAsync("ws://localhost:" + port + "/ws", new WebSocketHttpHeaders(),
-                headers, new StompSessionHandlerAdapter() {
-                }).get(5, TimeUnit.SECONDS);
-    }
-
-    private BlockingQueue<JsonNode> subscribe(StompSession session, String destination) {
-        BlockingQueue<JsonNode> queue = new LinkedBlockingQueue<>();
-        session.subscribe(destination, new StompFrameHandler() {
-            @Override
-            @NonNull
-            public Type getPayloadType(@NonNull StompHeaders headers) {
-                return JsonNode.class;
-            }
-
-            @Override
-            public void handleFrame(@NonNull StompHeaders headers, Object payload) {
-                queue.add((JsonNode) payload);
-            }
-        });
-        return queue;
-    }
-
-    private JsonNode nextOfType(BlockingQueue<JsonNode> queue, String type) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + 5000;
-        while (System.currentTimeMillis() < deadline) {
-            JsonNode node = queue.poll(500, TimeUnit.MILLISECONDS);
-            if (node != null && type.equals(node.path("type").asText())) {
-                return node;
-            }
-        }
-        throw new AssertionError("No " + type + " event received");
-    }
-
-    private boolean noneOfType(BlockingQueue<JsonNode> queue, String type) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + 1500;
-        while (System.currentTimeMillis() < deadline) {
-            JsonNode node = queue.poll(300, TimeUnit.MILLISECONDS);
-            if (node != null && type.equals(node.path("type").asText())) {
-                return false;
-            }
-        }
-        return true;
     }
 }
