@@ -9,6 +9,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -79,8 +80,22 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest req) {
+        // spring's own web errors (unknown path, wrong method or content type...) know their status
+        if (ex instanceof ErrorResponse error) {
+            return fromErrorResponse(error, req);
+        }
         log.error("Unhandled error on {}", req.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Something went wrong", req);
+    }
+
+    private ResponseEntity<ApiError> fromErrorResponse(ErrorResponse error, HttpServletRequest req) {
+        HttpStatus status = HttpStatus.valueOf(error.getStatusCode().value());
+        String detail = error.getBody().getDetail();
+        // the default 404 detail talks about static resources, which means nothing to an api client
+        String message = status == HttpStatus.NOT_FOUND || detail == null ? status.getReasonPhrase() : detail;
+        return ResponseEntity.status(status)
+                .headers(error.getHeaders())
+                .body(ApiError.of(status.value(), status.getReasonPhrase(), message, req.getRequestURI()));
     }
 
     private ResponseEntity<ApiError> build(HttpStatus status, String message, HttpServletRequest req) {

@@ -270,6 +270,7 @@ GitHub Actions runs the backend tests and the frontend lint and build on every p
   - profiles, profile pictures and image messages: type checks, size limits, access for members, removed members and non-members
   - replies and reactions: quotes from other chats rejected, one reaction per member, live `REACTION` events
   - group photos and live updates: only admins can change them, members-only access, `PROFILE` events skip hidden chats
+  - client mistakes (unknown path, wrong method or content type, missing parameter) get their 4xx status, not a 500
 
 ## Possible improvements
 
