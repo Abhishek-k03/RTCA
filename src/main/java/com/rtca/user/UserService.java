@@ -87,11 +87,13 @@ public class UserService {
 
     @Transactional(readOnly = true)
     public PageResponse<UserSummary> search(String query, Pageable pageable) {
-        String q = query == null ? "" : query.trim().replace("%", "").replace("_", "\\_");
+        String q = query == null ? "" : query.trim();
         if (q.isEmpty()) {
             throw new BadRequestException("Search query must not be empty");
         }
-        return PageResponse.of(userRepository.search(q, pageable), UserSummary::from);
+        // like wildcards typed by the user are matched literally, usernames can contain '_'
+        String escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+        return PageResponse.of(userRepository.search(escaped, pageable), UserSummary::from);
     }
 
     @Transactional(readOnly = true)

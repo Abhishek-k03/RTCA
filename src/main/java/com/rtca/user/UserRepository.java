@@ -13,8 +13,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     @Query("""
             select u from User u
-            where lower(u.username) like lower(concat(:q, '%'))
-               or lower(u.displayName) like lower(concat(:q, '%'))
+            where lower(u.username) like lower(concat(:q, '%')) escape '\\'
+               or lower(u.displayName) like lower(concat(:q, '%')) escape '\\'
             """)
     Page<User> search(@Param("q") String query, Pageable pageable);
 
