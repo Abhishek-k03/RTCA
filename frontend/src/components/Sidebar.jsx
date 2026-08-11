@@ -16,7 +16,7 @@ const THEME_ICON = { system: Monitor, light: Sun, dark: Moon }
 
 export default function Sidebar({ conversations, activeId, recents, onOpenChat, onOpenUser, onGroupCreated, className = '' }) {
   const { user, logout } = useAuth()
-  const { pushError } = useStomp()
+  const { connected, pushError } = useStomp()
   const notifications = useNotificationSetting()
   const { theme, next } = useTheme()
   const [searching, setSearching] = useState(false)
@@ -41,7 +41,8 @@ export default function Sidebar({ conversations, activeId, recents, onOpenChat, 
   }
 
   return (
-    <aside className={`flex min-h-0 flex-col bg-canvas ${className}`}>
+    // data-live is for the browser tests, the connection state isn't shown
+    <aside data-live={connected} className={`flex min-h-0 flex-col bg-canvas ${className}`}>
       <div className="px-6 pt-8 pb-6">
         <Brand />
       </div>

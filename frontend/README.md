@@ -29,3 +29,4 @@ docker compose up --build
 | `npm run build` | production build into `dist/` |
 | `npm run lint` | oxlint |
 | `npm run preview` | serve the production build |
+| `npm run test:e2e` | Playwright browser tests in `e2e/`. Needs the backend on `localhost:8080`, serves a production build on `:4173` |
