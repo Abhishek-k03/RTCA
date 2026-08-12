@@ -252,7 +252,7 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
 ./mvnw verify
 ```
 
-GitHub Actions runs the backend tests and the frontend lint and build on every push to `master` and on pull requests.
+GitHub Actions runs the backend tests, the frontend lint and build, and the browser tests on every push to `master` and on pull requests.
 
 - Unit tests cover the auth service and JWT handling. MockMvc tests cover the auth endpoints, the refresh cookie and error mapping.
 - Integration tests use Testcontainers for real Postgres and Redis (Docker required). They cover:
@@ -271,6 +271,21 @@ GitHub Actions runs the backend tests and the frontend lint and build on every p
   - replies and reactions: quotes from other chats rejected, one reaction per member, live `REACTION` events
   - group photos and live updates: only admins can change them, members-only access, `PROFILE` events skip hidden chats
   - client mistakes (unknown path, wrong method or content type, missing parameter) get their 4xx status, not a 500
+  - user search treats `_` and `%` literally
+- Browser tests (Playwright, in [`frontend/e2e`](frontend/e2e)) drive the real app with two people signed in at once:
+  - registration, sign-in that survives a reload, sign-out
+  - live messages, typing, read receipts, edits and deletes
+  - search, replies and jumping to the quoted message, reactions
+  - photos (scaled down before upload), profile and group photos reaching others live
+  - a removed member keeping a read-only copy of a group
+
+  They need the backend on `localhost:8080`:
+
+  ```bash
+  cd frontend
+  npx playwright install chromium   # once
+  npm run test:e2e                  # PW_CHANNEL=msedge uses an installed Edge instead
+  ```
 
 ## Possible improvements
 

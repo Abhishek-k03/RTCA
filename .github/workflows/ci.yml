@@ -46,3 +46,55 @@ jobs:
       - run: npm ci
       - run: npm run lint
       - run: npm run build
+
+  # the real app in a browser: backend jar + postgres + redis, frontend from a production build
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: rtca
+          POSTGRES_USER: rtca
+          POSTGRES_PASSWORD: rtca
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U rtca -d rtca"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: maven
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Start the backend
+        run: |
+          ./mvnw -B -q -DskipTests package
+          java -jar target/rtca-*.jar > backend.log 2>&1 &
+          timeout 120 bash -c 'until curl -sf localhost:8080/actuator/health/readiness; do sleep 2; done'
+      - run: npm ci
+        working-directory: frontend
+      - run: npx playwright install --with-deps chromium
+        working-directory: frontend
+      - run: npm run test:e2e
+        working-directory: frontend
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            frontend/playwright-report
+            frontend/test-results
+            backend.log
