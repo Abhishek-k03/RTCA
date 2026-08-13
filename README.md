@@ -2,11 +2,11 @@
 
 [![CI](https://github.com/Abhishek-k03/RTCA/actions/workflows/ci.yml/badge.svg)](https://github.com/Abhishek-k03/RTCA/actions/workflows/ci.yml)
 
-A backend for a real-time chat application built with Spring Boot. It supports one-to-one and group chats over WebSockets (STOMP), stores messages in PostgreSQL, and uses Redis for presence, caching, rate limiting and cross-instance fan-out.
+A real-time chat application with a Spring Boot backend and a React frontend. It supports one-to-one and group chats over WebSockets (STOMP), stores messages in PostgreSQL, and uses Redis for presence, caching, rate limiting and cross-instance fan-out.
 
 ## Screenshots
 
-The React frontend in [`frontend/`](frontend) talks to this backend over REST and STOMP.
+The React frontend in [`frontend/`](frontend) talks to the backend over REST and STOMP.
 
 A direct chat: a photo with a caption, a reply quoting it, reactions, an edited message and the other person typing.
 
@@ -41,13 +41,17 @@ On a phone, and the profile page with photo and bio.
 - Replies that quote the original message, and emoji reactions (one per member per message)
 - Profiles with display name, bio and profile picture, and group photos. Name and photo changes show up live for everyone who shares a chat
 - Image messages with an optional caption, only visible to members who can see that message
+- Web client with light and dark themes and a phone layout. Photos are scaled down in the browser before upload, and the unread count shows in the tab title, with optional browser notifications
 - Redis caching, per-user rate limiting, and pub/sub relay for running multiple instances
 - Centralized validation and error handling for both REST and WebSocket
-- Docker Compose setup with health checks
+- Docker Compose runs the whole stack (frontend on nginx, backend, Postgres, Redis) with health checks
+- CI on GitHub Actions: backend tests, frontend lint and build, and browser tests
 
 ## Tech stack
 
-Java 21, Spring Boot 3.5 (Web, Security, WebSocket, Data JPA, Validation, Cache, Actuator), PostgreSQL 16, Flyway, Redis 7, jjwt, Lombok, JUnit 5, Testcontainers, Docker.
+- **Backend:** Java 21, Spring Boot 3.5 (Web, Security, WebSocket, Data JPA, Validation, Cache, Actuator), PostgreSQL 16, Flyway, Redis 7, jjwt, Lombok
+- **Frontend:** React 19, Vite 8, Tailwind CSS 4, React Router, STOMP.js, lucide icons
+- **Testing and delivery:** JUnit 5, Testcontainers, Playwright, Docker, nginx, GitHub Actions
 
 ## Architecture
 
@@ -72,6 +76,8 @@ Code is organized by feature, and each feature package is layered:
 
 The schema is managed by Flyway (`src/main/resources/db/migration`). Hibernate only validates it.
 
+The frontend (`frontend/src`) keeps pages in `pages/`, UI in `components/`, the REST client and authenticated file loading in `api/`, and the STOMP connection with its subscription hooks in `ws/`. The access token lives in memory, and the client refreshes it and retries when a request gets a `401`.
+
 ## Running
 
 ### With Docker
@@ -81,7 +87,7 @@ cp .env.example .env
 docker compose up --build
 ```
 
-The app runs on `http://localhost:8080`. If ports 5432 or 6379 are already in use, change `POSTGRES_PORT` / `REDIS_PORT` in `.env`.
+Open `http://localhost:3000` for the web app. The API is on `http://localhost:8080`. If a port is already in use, change `WEB_PORT`, `APP_PORT`, `POSTGRES_PORT` or `REDIS_PORT` in `.env`.
 
 To create an admin on startup, set `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
 
@@ -90,6 +96,14 @@ To create an admin on startup, set `ADMIN_USERNAME` and `ADMIN_PASSWORD`.
 ```bash
 docker compose up -d postgres redis
 ./mvnw spring-boot:run
+```
+
+Then the frontend, with hot reload on `http://localhost:5173`. Vite proxies `/api` and `/ws` to the backend:
+
+```bash
+cd frontend
+npm install
+npm run dev
 ```
 
 ### Configuration
@@ -121,7 +135,7 @@ All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` head
 | GET / PATCH | `/api/users/me` | own profile. PATCH `{displayName, bio}`, a blank bio clears it |
 | PUT / DELETE | `/api/users/me/avatar` | set (multipart `file`, up to 2 MB) or remove your profile picture |
 | GET | `/api/users/{id}` | public profile |
-| GET | `/api/users/search?q=` | search by username/display name |
+| GET | `/api/users/search?q=` | search by the start of a username or display name |
 | GET | `/api/conversations` | my conversations with unread counts, most recent first |
 | GET | `/api/conversations/{id}` | conversation details |
 | POST | `/api/conversations/direct` | `{userId}` get or create a direct chat (hidden until the first message) |
@@ -142,8 +156,9 @@ All endpoints except `/api/auth/**` need an `Authorization: Bearer <token>` head
 | DELETE | `/api/conversations/{id}/messages/{messageId}?scope=everyone` | delete your own message for all members |
 | PUT / DELETE | `/api/conversations/{id}/messages/{messageId}/reaction` | `{emoji}` react (👍 ❤️ 😂 😮 😢 🙏), picking another replaces yours. DELETE takes it back |
 | GET | `/api/files/{id}` | an uploaded image (profile picture or chat image) |
-| GET | `/api/presence?userIds=1,2` | presence status |
-| GET / PATCH | `/api/admin/users` | admin only |
+| GET | `/api/presence?userIds={id},{id}` | presence status, up to 200 users |
+| GET | `/api/admin/users` | all users, paged (admin only) |
+| PATCH | `/api/admin/users/{id}/role` | `{role}` change a user's role (admin only) |
 
 Errors come back in one consistent shape:
 
@@ -151,6 +166,8 @@ Errors come back in one consistent shape:
 { "timestamp": "...", "status": 400, "error": "Bad Request", "message": "Validation failed",
   "path": "/api/auth/register", "fieldErrors": { "email": "must be a well-formed email address" } }
 ```
+
+Unknown paths, wrong methods and unsupported content types get `404`, `405` and `415` in the same shape. Only unexpected failures are a `500`, and those don't include internal details.
 
 ## WebSocket (STOMP)
 
@@ -225,7 +242,7 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
   - The rate limiter fails open.
   - Cache errors fall through to the DB.
   - Presence errors are logged and never break a socket.
-- **Validation and errors:** all validation and domain errors map to clear HTTP statuses. WebSocket errors go only to the sender, on `/user/queue/errors`.
+- **Validation and errors:** validation, domain and request errors map to clear HTTP statuses, and only real failures are logged as errors. WebSocket errors go only to the sender, on `/user/queue/errors`.
 - **Rejected frames:** an unauthenticated CONNECT or a forbidden SUBSCRIBE gets a STOMP ERROR frame.
 - **Operations:** graceful shutdown, readiness/liveness probes (DB and Redis), and container health checks.
 
@@ -254,7 +271,7 @@ Service methods own the transaction boundaries, and reads are `readOnly`. Broadc
 
 GitHub Actions runs the backend tests, the frontend lint and build, and the browser tests on every push to `master` and on pull requests.
 
-- Unit tests cover the auth service and JWT handling. MockMvc tests cover the auth endpoints, the refresh cookie and error mapping.
+- Unit tests cover the auth service, JWT handling and the error handler. MockMvc tests cover the auth endpoints, the refresh cookie and error mapping.
 - Integration tests use Testcontainers for real Postgres and Redis (Docker required). They cover:
   - concurrent direct-chat creation
   - idempotent sends
@@ -294,3 +311,4 @@ GitHub Actions runs the backend tests, the frontend lint and build, and the brow
 - An outbox table for guaranteed event delivery when Redis is down for a long time
 - S3-compatible storage behind `FileStorage` for running several instances without a shared volume
 - Thumbnails, other attachment types and push notifications
+- Message search, and online dots in the conversation list
